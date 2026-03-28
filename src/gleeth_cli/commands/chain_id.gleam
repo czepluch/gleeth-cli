@@ -4,9 +4,9 @@ import gleeth/rpc/methods
 import gleeth/rpc/types as rpc_types
 import gleeth_cli/formatting
 
-/// Execute block number command
+/// Execute chain ID command
 pub fn execute(provider: Provider) -> Result(Nil, rpc_types.GleethError) {
-  use block_number <- result.try(methods.get_block_number(provider))
-  formatting.print_block_number(block_number)
+  use chain_id_hex <- result.try(methods.get_chain_id(provider))
+  formatting.format_hex_with_decimal(chain_id_hex, "Chain ID")
   Ok(Nil)
 }

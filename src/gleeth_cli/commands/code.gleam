@@ -1,3 +1,4 @@
+import gleam/int
 import gleam/io
 import gleam/result
 import gleam/string
@@ -6,7 +7,7 @@ import gleeth/provider.{type Provider}
 import gleeth/rpc/methods
 import gleeth/rpc/types as rpc_types
 
-// Execute code command - get bytecode at an address
+/// Execute code command - get bytecode at an address
 pub fn execute(
   provider: Provider,
   address: eth_types.Address,
@@ -31,7 +32,7 @@ fn print_code(address: eth_types.Address, code: String) -> Nil {
     _ -> {
       io.println("Type: Contract")
       io.println(
-        "Code Length: " <> string.inspect(string.length(code)) <> " characters",
+        "Code Length: " <> int.to_string(string.length(code)) <> " characters",
       )
 
       // Show first part of bytecode with truncation for readability

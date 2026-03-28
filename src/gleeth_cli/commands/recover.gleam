@@ -1,4 +1,5 @@
 import gleam/bit_array
+import gleam/int
 import gleam/io
 import gleam/list
 import gleam/result
@@ -248,7 +249,7 @@ fn format_detailed(result: RecoveryResult) -> Result(String, String) {
         list.map(candidates, fn(candidate) {
           let #(id, key, addr) = candidate
           "Recovery ID "
-          <> string.inspect(id)
+          <> int.to_string(id)
           <> ":\n"
           <> "  Public Key: "
           <> key
@@ -294,7 +295,7 @@ fn format_json(result: RecoveryResult) -> Result(String, String) {
         list.map(candidates, fn(candidate) {
           let #(id, key, addr) = candidate
           "{\"recovery_id\":"
-          <> string.inspect(id)
+          <> int.to_string(id)
           <> ",\"public_key\":\""
           <> key
           <> "\""
@@ -448,4 +449,43 @@ pub fn print_usage() {
   io.println(
     "  gleeth recover --mode pubkey --format json \"Hello\" 0x123...abc",
   )
+}
+
+/// Parse command line arguments for the recover command
+pub fn parse_args(args: List(String)) -> Result(RecoverOptions, String) {
+  parse_recover_args_helper(args, default_options())
+}
+
+fn parse_recover_args_helper(
+  args: List(String),
+  options: RecoverOptions,
+) -> Result(RecoverOptions, String) {
+  case args {
+    ["--mode", mode_str, ..rest] -> {
+      use mode <- result.try(parse_recovery_mode(mode_str))
+      parse_recover_args_helper(
+        rest,
+        RecoverOptions(..options, recovery_mode: mode),
+      )
+    }
+    ["--format", fmt_str, ..rest] -> {
+      use fmt <- result.try(parse_output_format(fmt_str))
+      parse_recover_args_helper(rest, RecoverOptions(..options, format: fmt))
+    }
+    [message, signature] -> {
+      Ok(RecoverOptions(..options, message: message, signature: signature))
+    }
+    _ ->
+      Error(
+        "Usage: recover [--mode <mode>] [--format <format>] <message> <signature>",
+      )
+  }
+}
+
+/// Run recovery and print output
+pub fn run(options: RecoverOptions) -> Result(Nil, String) {
+  use _ <- result.try(validate_options(options))
+  use output <- result.try(execute_recovery(options))
+  io.println(output)
+  Ok(Nil)
 }

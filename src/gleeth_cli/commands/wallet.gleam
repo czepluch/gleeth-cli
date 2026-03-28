@@ -154,7 +154,7 @@ fn handle_sign_message(
 
   let #(v, r, s) = secp256k1.signature_to_vrs(signature)
   formatting.print_section("Signature components")
-  formatting.print_labeled_value("v", string.inspect(v))
+  formatting.print_labeled_value("v", int.to_string(v))
   formatting.print_labeled_value("r", r)
   formatting.print_labeled_value("s", s)
 
@@ -200,7 +200,7 @@ fn handle_verify_message(
 
   // Create personal message hash (same as signing)
   let message_bytes = bit_array.from_string(message)
-  let message_length = bit_array.byte_size(message_bytes) |> string.inspect
+  let message_length = bit_array.byte_size(message_bytes) |> int.to_string
   let prefix = "\\x19Ethereum Signed Message:\\n" <> message_length
   let prefix_bytes = bit_array.from_string(prefix)
   let full_message = bit_array.append(prefix_bytes, message_bytes)
@@ -272,7 +272,10 @@ fn print_wallet_info(wallet_obj: wallet.Wallet) -> Nil {
   formatting.print_labeled_value("Address", formatting.display_address(address))
   formatting.print_labeled_value("Private Key", hex.normalize(private_key))
   formatting.print_labeled_value("Public Key", hex.normalize(public_key))
-  formatting.print_labeled_value("Valid", string.inspect(is_valid))
+  formatting.print_labeled_value("Valid", case is_valid {
+    True -> "true"
+    False -> "false"
+  })
 }
 
 /// Print usage information
@@ -302,20 +305,4 @@ pub fn print_usage() -> Nil {
   io.println(
     "  gleeth wallet verify -p 0x04abc... -m 'Hello World' -s 0xdef...",
   )
-}
-
-/// Print help for wallet command
-pub fn print_help() -> Nil {
-  io.println("Gleeth Wallet Management")
-  io.println("========================")
-  io.println("")
-  io.println("Manage Ethereum wallets and sign messages.")
-  io.println("")
-  print_usage()
-  io.println("")
-  io.println("Security Notes:")
-  io.println("- Never share your private key")
-  io.println("- Store private keys securely")
-  io.println("- Use hardware wallets for large amounts")
-  io.println("- Test on testnets before mainnet")
 }

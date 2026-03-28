@@ -7,7 +7,7 @@ import gleeth/rpc/methods
 import gleeth/rpc/types as rpc_types
 import gleeth/utils/hex
 
-// Execute storage-at command
+/// Execute storage-at command
 pub fn execute(
   provider: Provider,
   address: String,

@@ -14,13 +14,13 @@ import gleeth/rpc/types as rpc_types
 import gleeth/utils/hex
 import gleeth_cli/file
 
-// Result type for individual balance checks
+/// Result type for individual balance checks
 pub type BalanceResult {
   BalanceSuccess(address: Address, balance: Wei, ether: Float)
   BalanceError(address: Address, error: String)
 }
 
-// Summary statistics for multiple balance checks
+/// Summary statistics for multiple balance checks
 pub type BalanceSummary {
   BalanceSummary(
     total_addresses: Int,
@@ -31,7 +31,7 @@ pub type BalanceSummary {
   )
 }
 
-// Execute parallel balance checks for multiple addresses
+/// Execute parallel balance checks for multiple addresses
 pub fn execute_parallel(
   provider: Provider,
   addresses: List(Address),

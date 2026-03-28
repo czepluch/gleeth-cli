@@ -7,7 +7,7 @@ import gleeth/rpc/types as rpc_types
 import gleeth_cli/commands/parallel_balance
 import gleeth_cli/formatting
 
-// Execute balance command - handles both single and multiple addresses
+/// Execute balance command - handles both single and multiple addresses
 pub fn execute(
   provider: Provider,
   addresses: List(eth_types.Address),

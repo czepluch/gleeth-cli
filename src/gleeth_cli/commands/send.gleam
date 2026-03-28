@@ -11,6 +11,7 @@ import gleeth/rpc/types as rpc_types
 import gleeth/utils/hex
 import gleeth_cli/formatting
 
+/// Transaction send arguments
 pub type SendArgs {
   SendArgs(
     to: String,
@@ -22,6 +23,7 @@ pub type SendArgs {
   )
 }
 
+/// Execute send transaction command
 pub fn execute(
   provider: Provider,
   args: SendArgs,

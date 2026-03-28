@@ -10,7 +10,7 @@ import gleeth/rpc/types as rpc_types
 import gleeth/utils/hex
 import gleeth_cli/formatting
 
-// Execute transaction command
+/// Execute transaction command
 pub fn execute(
   provider: Provider,
   transaction_hash: String,

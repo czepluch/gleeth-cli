@@ -8,7 +8,7 @@ import gleeth/provider.{type Provider}
 import gleeth/rpc/methods
 import gleeth/rpc/types as rpc_types
 
-// Execute get-logs command
+/// Execute get-logs command
 pub fn execute(
   provider: Provider,
   from_block: String,

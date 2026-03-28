@@ -16,7 +16,7 @@ import gleeth/utils/hex
 import gleeth/utils/validation
 import simplifile
 
-// Execute a contract function call
+/// Execute a contract function call
 pub fn execute(
   provider: Provider,
   contract_address: String,

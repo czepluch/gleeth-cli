@@ -9,7 +9,7 @@ import gleeth/rpc/methods
 import gleeth/rpc/types as rpc_types
 import gleeth/utils/hex
 
-// Execute estimate-gas command
+/// Execute estimate-gas command
 pub fn execute(
   provider: Provider,
   from: String,

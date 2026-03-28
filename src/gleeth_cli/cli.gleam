@@ -1,3 +1,5 @@
+import gleam/float
+import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -7,7 +9,7 @@ import gleeth/ethereum/types as eth_types
 import gleeth/rpc/types as rpc_types
 import gleeth/utils/validation
 
-// CLI command definitions
+/// CLI command definitions
 pub type Command {
   BlockNumber
   Balance(addresses: List(eth_types.Address), file: Option(String))
@@ -37,14 +39,34 @@ pub type Command {
   )
   Wallet(wallet_args: List(String))
   Help
+  // RPC commands
+  ChainId
+  GasPrice
+  FeeHistory(block_count: Int, newest_block: String, percentiles: List(Float))
+  Nonce(address: eth_types.Address, block: String)
+  Receipt(hash: eth_types.Hash)
+  Wait(hash: eth_types.Hash, timeout: Int)
+  // Offline commands
+  Recover(recover_args: List(String))
+  Checksum(address: String)
+  Convert(value: String, from_unit: String, to_unit: String)
+  DecodeTx(raw_hex: String)
+  DecodeCalldata(
+    calldata: String,
+    signature: Option(String),
+    abi_file: Option(String),
+    function_name: Option(String),
+  )
+  DecodeRevert(data: String, abi_file: Option(String))
+  Selector(signature: String, is_event: Bool)
 }
 
-// CLI arguments structure
+/// CLI arguments structure
 pub type Args {
   Args(command: Command, rpc_url: String)
 }
 
-// Parse command line arguments
+/// Parse command line arguments
 pub fn parse_args(args: List(String)) -> Result(Args, rpc_types.GleethError) {
   case args {
     [] -> Ok(Args(Help, ""))
@@ -116,6 +138,79 @@ pub fn parse_args(args: List(String)) -> Result(Args, rpc_types.GleethError) {
     ["wallet", ..wallet_args] -> {
       // Wallet commands don't require RPC URL
       Ok(Args(Wallet(wallet_args), ""))
+    }
+
+    // RPC commands
+    ["chain-id", ..rest] -> {
+      use rpc_url <- result.try(extract_rpc_url(rest))
+      Ok(Args(ChainId, rpc_url))
+    }
+
+    ["gas-price", ..rest] -> {
+      use rpc_url <- result.try(extract_rpc_url(rest))
+      Ok(Args(GasPrice, rpc_url))
+    }
+
+    ["fee-history", ..rest] -> {
+      use #(block_count, newest_block, percentiles, remaining) <- result.try(
+        parse_fee_history_args(rest),
+      )
+      use rpc_url <- result.try(extract_rpc_url(remaining))
+      Ok(Args(FeeHistory(block_count, newest_block, percentiles), rpc_url))
+    }
+
+    ["nonce", address, ..rest] -> {
+      use validated_address <- result.try(validation.validate_address(address))
+      use #(block, remaining) <- result.try(parse_nonce_args(rest))
+      use rpc_url <- result.try(extract_rpc_url(remaining))
+      Ok(Args(Nonce(validated_address, block), rpc_url))
+    }
+
+    ["receipt", hash, ..rest] -> {
+      use validated_hash <- result.try(validation.validate_hash(hash))
+      use rpc_url <- result.try(extract_rpc_url(rest))
+      Ok(Args(Receipt(validated_hash), rpc_url))
+    }
+
+    ["wait", hash, ..rest] -> {
+      use validated_hash <- result.try(validation.validate_hash(hash))
+      use #(timeout, remaining) <- result.try(parse_wait_args(rest))
+      use rpc_url <- result.try(extract_rpc_url(remaining))
+      Ok(Args(Wait(validated_hash, timeout), rpc_url))
+    }
+
+    // Offline commands
+    ["recover", ..recover_args] -> {
+      Ok(Args(Recover(recover_args), ""))
+    }
+
+    ["checksum", address] -> {
+      Ok(Args(Checksum(address), ""))
+    }
+
+    ["convert", value, ..rest] -> {
+      use #(from_unit, to_unit) <- result.try(parse_convert_args(rest))
+      Ok(Args(Convert(value, from_unit, to_unit), ""))
+    }
+
+    ["decode-tx", raw_hex] -> {
+      Ok(Args(DecodeTx(raw_hex), ""))
+    }
+
+    ["decode-calldata", calldata, ..rest] -> {
+      let #(signature, abi_file, function_name) =
+        parse_decode_calldata_args(rest)
+      Ok(Args(DecodeCalldata(calldata, signature, abi_file, function_name), ""))
+    }
+
+    ["decode-revert", data, ..rest] -> {
+      let abi_file = parse_decode_revert_args(rest)
+      Ok(Args(DecodeRevert(data, abi_file), ""))
+    }
+
+    ["selector", signature, ..rest] -> {
+      let is_event = parse_selector_args(rest)
+      Ok(Args(Selector(signature, is_event), ""))
     }
 
     _ ->
@@ -517,7 +612,158 @@ fn parse_send_args_helper(
   }
 }
 
-// Display help message
+// Parse fee-history command arguments
+fn parse_fee_history_args(
+  args: List(String),
+) -> Result(#(Int, String, List(Float), List(String)), rpc_types.GleethError) {
+  parse_fee_history_helper(args, 0, "latest", [])
+}
+
+fn parse_fee_history_helper(
+  args: List(String),
+  block_count: Int,
+  newest_block: String,
+  percentiles: List(Float),
+) -> Result(#(Int, String, List(Float), List(String)), rpc_types.GleethError) {
+  case args {
+    [] -> {
+      case block_count {
+        0 ->
+          Error(rpc_types.ConfigError("fee-history requires --block-count flag"))
+        _ -> Ok(#(block_count, newest_block, percentiles, []))
+      }
+    }
+    ["--block-count", count_str, ..rest] -> {
+      case int.parse(count_str) {
+        Ok(count) ->
+          parse_fee_history_helper(rest, count, newest_block, percentiles)
+        Error(_) ->
+          Error(rpc_types.ConfigError("Invalid block count: " <> count_str))
+      }
+    }
+    ["--newest-block", block, ..rest] ->
+      parse_fee_history_helper(rest, block_count, block, percentiles)
+    ["--percentiles", pct_str, ..rest] -> {
+      case parse_float_list(pct_str) {
+        Ok(pcts) ->
+          parse_fee_history_helper(rest, block_count, newest_block, pcts)
+        Error(_) ->
+          Error(rpc_types.ConfigError(
+            "Invalid percentiles: "
+            <> pct_str
+            <> " (expected comma-separated floats like 25.0,50.0,75.0)",
+          ))
+      }
+    }
+    _ -> {
+      case block_count {
+        0 ->
+          Error(rpc_types.ConfigError("fee-history requires --block-count flag"))
+        _ -> Ok(#(block_count, newest_block, percentiles, args))
+      }
+    }
+  }
+}
+
+fn parse_float_list(s: String) -> Result(List(Float), Nil) {
+  s
+  |> string.split(",")
+  |> list.try_map(fn(part) {
+    let trimmed = string.trim(part)
+    case float.parse(trimmed) {
+      Ok(f) -> Ok(f)
+      Error(_) -> {
+        // Try parsing as int and converting
+        case int.parse(trimmed) {
+          Ok(i) -> Ok(int.to_float(i))
+          Error(_) -> Error(Nil)
+        }
+      }
+    }
+  })
+}
+
+// Parse nonce command arguments
+fn parse_nonce_args(
+  args: List(String),
+) -> Result(#(String, List(String)), rpc_types.GleethError) {
+  case args {
+    ["--block", block, ..rest] -> Ok(#(block, rest))
+    _ -> Ok(#("pending", args))
+  }
+}
+
+// Parse wait command arguments
+fn parse_wait_args(
+  args: List(String),
+) -> Result(#(Int, List(String)), rpc_types.GleethError) {
+  case args {
+    ["--timeout", timeout_str, ..rest] -> {
+      case int.parse(timeout_str) {
+        Ok(timeout) -> Ok(#(timeout, rest))
+        Error(_) ->
+          Error(rpc_types.ConfigError("Invalid timeout: " <> timeout_str))
+      }
+    }
+    _ -> Ok(#(60_000, args))
+  }
+}
+
+// Parse convert command arguments
+fn parse_convert_args(
+  args: List(String),
+) -> Result(#(String, String), rpc_types.GleethError) {
+  case args {
+    ["--from", from_unit, "--to", to_unit] -> Ok(#(from_unit, to_unit))
+    ["--to", to_unit, "--from", from_unit] -> Ok(#(from_unit, to_unit))
+    _ ->
+      Error(rpc_types.ConfigError(
+        "convert requires --from <unit> --to <unit> (units: wei, gwei, ether)",
+      ))
+  }
+}
+
+// Parse decode-calldata arguments
+fn parse_decode_calldata_args(
+  args: List(String),
+) -> #(Option(String), Option(String), Option(String)) {
+  parse_decode_calldata_helper(args, None, None, None)
+}
+
+fn parse_decode_calldata_helper(
+  args: List(String),
+  signature: Option(String),
+  abi_file: Option(String),
+  function_name: Option(String),
+) -> #(Option(String), Option(String), Option(String)) {
+  case args {
+    ["--signature", sig, ..rest] ->
+      parse_decode_calldata_helper(rest, Some(sig), abi_file, function_name)
+    ["--abi", file, ..rest] ->
+      parse_decode_calldata_helper(rest, signature, Some(file), function_name)
+    ["--function", name, ..rest] ->
+      parse_decode_calldata_helper(rest, signature, abi_file, Some(name))
+    _ -> #(signature, abi_file, function_name)
+  }
+}
+
+// Parse decode-revert arguments
+fn parse_decode_revert_args(args: List(String)) -> Option(String) {
+  case args {
+    ["--abi", file, ..] -> Some(file)
+    _ -> None
+  }
+}
+
+// Parse selector arguments
+fn parse_selector_args(args: List(String)) -> Bool {
+  case args {
+    ["--event", ..] -> True
+    _ -> False
+  }
+}
+
+/// Display help message
 pub fn show_help() -> Nil {
   io.println("gleeth-cli - Ethereum CLI built on gleeth")
   io.println("")
@@ -640,4 +886,73 @@ pub fn show_help() -> Nil {
   io.println(
     "  gleeth wallet sign --private-key 0x1234... --message 'Hello World'",
   )
+  io.println("")
+  io.println("ADDITIONAL QUERY COMMANDS:")
+  io.println(
+    "  chain-id                        Get chain ID of connected network",
+  )
+  io.println(
+    "  gas-price                       Get current gas price and priority fee",
+  )
+  io.println(
+    "  fee-history --block-count <n>   Get fee history for recent blocks",
+  )
+  io.println(
+    "  nonce <address>                 Get transaction count (nonce) for address",
+  )
+  io.println("  receipt <hash>                  Get transaction receipt")
+  io.println(
+    "  wait <hash>                     Wait for transaction to be mined",
+  )
+  io.println("")
+  io.println("FEE-HISTORY OPTIONS:")
+  io.println(
+    "  --block-count <n>              Number of blocks to query (required)",
+  )
+  io.println(
+    "  --newest-block <block>         Newest block (optional, defaults to 'latest')",
+  )
+  io.println(
+    "  --percentiles <p1,p2,...>       Reward percentiles (optional, e.g. 25,50,75)",
+  )
+  io.println("")
+  io.println("NONCE OPTIONS:")
+  io.println(
+    "  --block <pending|latest>       Block tag (optional, defaults to 'pending')",
+  )
+  io.println("")
+  io.println("WAIT OPTIONS:")
+  io.println(
+    "  --timeout <ms>                 Timeout in milliseconds (optional, defaults to 60000)",
+  )
+  io.println("")
+  io.println("OFFLINE COMMANDS (no RPC needed):")
+  io.println("  recover [OPTIONS] <msg> <sig>   Recover signer from signature")
+  io.println("  checksum <address>              Get EIP-55 checksummed address")
+  io.println(
+    "  convert <value> --from <unit> --to <unit>  Convert between wei/gwei/ether",
+  )
+  io.println(
+    "  decode-tx <raw-hex>             Decode a signed raw transaction",
+  )
+  io.println("  decode-calldata <hex> [OPTIONS]  Decode contract calldata")
+  io.println("  decode-revert <hex> [--abi <f>]  Decode revert reason")
+  io.println(
+    "  selector <signature> [--event]  Compute function selector or event topic",
+  )
+  io.println("")
+  io.println("RECOVER OPTIONS:")
+  io.println(
+    "  --mode <MODE>                  pubkey|address|candidates|verify:<addr>",
+  )
+  io.println("  --format <FORMAT>              compact|detailed|json")
+  io.println("")
+  io.println("DECODE-CALLDATA OPTIONS:")
+  io.println(
+    "  --signature <sig>              Function signature (e.g. transfer(address,uint256))",
+  )
+  io.println(
+    "  --abi <file>                   JSON ABI file (alternative to --signature)",
+  )
+  io.println("  --function <name>              Function name (used with --abi)")
 }

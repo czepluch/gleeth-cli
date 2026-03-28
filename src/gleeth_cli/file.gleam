@@ -5,7 +5,7 @@ import gleeth/rpc/types as rpc_types
 import gleeth/utils/validation
 import simplifile
 
-// Read addresses from a file (one per line)
+/// Read addresses from a file (one per line)
 pub fn read_addresses_from_file(
   filename: String,
 ) -> Result(List(eth_types.Address), rpc_types.GleethError) {
