@@ -2,9 +2,6 @@
 
 Ethereum CLI built on [gleeth](https://hex.pm/packages/gleeth). Query blocks, balances, transactions, gas prices, and logs. Sign and send transactions. Manage wallets. Decode calldata, revert reasons, and raw transactions. All from the command line.
 
-[![Package Version](https://img.shields.io/hexpm/v/gleeth_cli)](https://hex.pm/packages/gleeth_cli)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/gleeth_cli/)
-
 ## Installation
 
 ### Requirements
