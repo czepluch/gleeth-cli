@@ -519,7 +519,7 @@ fn parse_send_args_helper(
 
 // Display help message
 pub fn show_help() -> Nil {
-  io.println("gleeth - Ethereum blockchain query tool")
+  io.println("gleeth-cli - Ethereum CLI built on gleeth")
   io.println("")
   io.println("USAGE:")
   io.println("  gleeth <COMMAND> [OPTIONS]")
