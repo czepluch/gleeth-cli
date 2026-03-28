@@ -5,16 +5,34 @@ Ethereum CLI built on [gleeth](https://hex.pm/packages/gleeth). Query blocks, ba
 [![Package Version](https://img.shields.io/hexpm/v/gleeth_cli)](https://hex.pm/packages/gleeth_cli)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/gleeth_cli/)
 
-## Requirements
-
-- Gleam >= 1.14.0
-- Erlang/OTP >= 27
-- Elixir (for NIF compilation)
-
 ## Installation
 
+### Requirements
+
+- Erlang/OTP >= 27
+- Gleam >= 1.14.0
+- Elixir (for NIF compilation)
+
+If you use [mise](https://mise.jdx.dev), the included `.mise.toml` handles all three.
+
+### Build from source
+
 ```sh
-gleam add gleeth_cli
+git clone https://github.com/czepluch/gleeth-cli.git
+cd gleeth-cli
+gleam export erlang-shipment
+```
+
+This produces `build/erlang-shipment/` with a self-contained BEAM release. Create an alias to use it as `gleeth`:
+
+```sh
+alias gleeth='/<path-to>/gleeth-cli/build/erlang-shipment/entrypoint.sh run'
+```
+
+Or during development, run directly with:
+
+```sh
+gleam run -- <command> [args]
 ```
 
 ## Quick Start
@@ -28,7 +46,7 @@ export GLEETH_RPC_URL=http://localhost:8545
 Or pass it explicitly:
 
 ```sh
-gleam run -- block-number --rpc-url http://localhost:8545
+gleeth block-number --rpc-url http://localhost:8545
 ```
 
 ## Commands
@@ -37,62 +55,62 @@ gleam run -- block-number --rpc-url http://localhost:8545
 
 ```sh
 # Get latest block number
-gleam run -- block-number
+gleeth block-number
 
 # Get chain ID
-gleam run -- chain-id
+gleeth chain-id
 
 # Get current gas price and priority fee
-gleam run -- gas-price
+gleeth gas-price
 
 # Get fee history for the last 10 blocks with reward percentiles
-gleam run -- fee-history --block-count 10 --percentiles 25,50,75
+gleeth fee-history --block-count 10 --percentiles 25,50,75
 ```
 
 ### Account Queries
 
 ```sh
 # Check balance of an address
-gleam run -- balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+gleeth balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
 # Check multiple balances at once (queried in parallel)
-gleam run -- balance 0xaddr1 0xaddr2 0xaddr3
+gleeth balance 0xaddr1 0xaddr2 0xaddr3
 
 # Check balances from a file (one address per line)
-gleam run -- balance --file addresses.txt
+gleeth balance --file addresses.txt
 
 # Get transaction count (nonce)
-gleam run -- nonce 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+gleeth nonce 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 ```
 
 ### Contract Interaction
 
 ```sh
 # Call a contract function
-gleam run -- call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 totalSupply
+gleeth call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 totalSupply
 
 # Call with parameters
-gleam run -- call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 balanceOf \
+gleeth call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 balanceOf \
   address:0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
 # Call with ABI file for typed decoding
-gleam run -- call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 balanceOf \
+gleeth call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 balanceOf \
   address:0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --abi erc20.json
 
 # Get contract bytecode
-gleam run -- code 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
+gleeth code 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
 
 # Estimate gas
-gleam run -- estimate-gas \
+gleeth estimate-gas \
   --from 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
   --to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
   --value 0xde0b6b3a7640000
 
 # Read contract storage
-gleam run -- storage-at --address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --slot 0x0
+gleeth storage-at --address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --slot 0x0
 
 # Query event logs
-gleam run -- get-logs --address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
+gleeth get-logs --address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
   --from-block 0x1000000 --to-block latest
 ```
 
@@ -100,41 +118,41 @@ gleam run -- get-logs --address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
 
 ```sh
 # Send ETH (EIP-1559)
-gleam run -- send \
+gleeth send \
   --to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
   --value 0xde0b6b3a7640000 \
   --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 # Send ETH (legacy transaction)
-gleam run -- send \
+gleeth send \
   --to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
   --value 0xde0b6b3a7640000 \
   --private-key 0x... --legacy
 
 # Look up a transaction
-gleam run -- transaction 0xabc123...
+gleeth transaction 0xabc123...
 
 # Get a transaction receipt
-gleam run -- receipt 0xabc123...
+gleeth receipt 0xabc123...
 
 # Wait for a transaction to be mined (polls with exponential backoff)
-gleam run -- wait 0xabc123... --timeout 120000
+gleeth wait 0xabc123... --timeout 120000
 ```
 
 ### Wallet Management
 
 ```sh
 # Generate a new wallet
-gleam run -- wallet generate
+gleeth wallet generate
 
 # Show wallet info from private key
-gleam run -- wallet info --private-key 0x...
+gleeth wallet info --private-key 0x...
 
 # Sign a message
-gleam run -- wallet sign --private-key 0x... --message "hello"
+gleeth wallet sign --private-key 0x... --message "hello"
 
 # Verify a signature
-gleam run -- wallet verify --public-key 0x04... --message "hello" --signature 0x...
+gleeth wallet verify --public-key 0x04... --message "hello" --signature 0x...
 ```
 
 ### Offline Utilities
@@ -143,30 +161,30 @@ These commands run locally without an RPC connection:
 
 ```sh
 # Compute EIP-55 checksummed address
-gleam run -- checksum 0xd8da6bf26964af9d7eed9e03e53415d37aa96045
+gleeth checksum 0xd8da6bf26964af9d7eed9e03e53415d37aa96045
 
 # Convert between units
-gleam run -- convert 1 --from ether --to wei
-gleam run -- convert 1000000000 --from gwei --to ether
+gleeth convert 1 --from ether --to wei
+gleeth convert 1000000000 --from gwei --to ether
 
 # Compute function selector
-gleam run -- selector "transfer(address,uint256)"
+gleeth selector "transfer(address,uint256)"
 
 # Compute event topic
-gleam run -- selector "Transfer(address,address,uint256)" --event
+gleeth selector "Transfer(address,address,uint256)" --event
 
 # Recover signer from signature
-gleam run -- recover --mode address "hello" 0x...
+gleeth recover --mode address "hello" 0x...
 
 # Decode a raw signed transaction
-gleam run -- decode-tx 0x02f8...
+gleeth decode-tx 0x02f8...
 
 # Decode contract calldata
-gleam run -- decode-calldata 0xa9059cbb... --signature "transfer(address,uint256)"
-gleam run -- decode-calldata 0xa9059cbb... --abi erc20.json
+gleeth decode-calldata 0xa9059cbb... --signature "transfer(address,uint256)"
+gleeth decode-calldata 0xa9059cbb... --abi erc20.json
 
 # Decode revert reason
-gleam run -- decode-revert 0x08c379a0...
+gleeth decode-revert 0x08c379a0...
 ```
 
 ## Development
