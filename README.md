@@ -66,11 +66,14 @@ Values like `--value` and `--gas-limit` accept unit suffixes:
 
 ```sh
 gleeth block-number
+gleeth block latest
+gleeth block 21000000
 gleeth chain-id
 gleeth gas-price
 gleeth fee-history --block-count 10 --percentiles 25,50,75
 
 # JSON output for scripting
+gleeth block latest --chain mainnet --json
 gleeth gas-price --chain mainnet --json
 ```
 

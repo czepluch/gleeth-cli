@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-gleeth-cli is an Ethereum CLI tool written in Gleam, built on the [gleeth](https://hex.pm/packages/gleeth) library. It wraps the full gleeth API surface: RPC queries (blocks, balances, transactions, receipts, gas, fees, nonce, logs, storage), transaction signing/sending (legacy + EIP-1559), wallet management, and offline utilities (address checksum, unit conversion, ABI encoding/decoding, signature recovery, function selectors, keccak hashing). It also integrates with external services (Sourcify for ABI and signature lookups).
+gleeth-cli is an Ethereum CLI tool written in Gleam, built on the [gleeth](https://hex.pm/packages/gleeth) library (v1.4.0+). It wraps the full gleeth API surface: RPC queries (blocks, block details, balances, transactions, receipts, gas, fees, nonce, logs, storage), transaction signing/sending (legacy + EIP-1559), wallet management, and offline utilities (address checksum, unit conversion, ABI encoding/decoding, signature recovery, function selectors, keccak hashing). It also integrates with external services (Sourcify for ABI and signature lookups).
 
 ## Build and Development
 
