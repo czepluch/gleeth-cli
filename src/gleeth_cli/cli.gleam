@@ -375,11 +375,18 @@ fn extract_call_args_helper(
   abi_file: Option(String),
 ) -> #(List(String), Option(String), List(String)) {
   case args {
-    ["--rpc-url", ..] -> #(list.reverse(parameters), abi_file, args)
     ["--abi", file, ..rest] ->
       extract_call_args_helper(rest, parameters, Some(file))
-    [param, ..rest] ->
+    ["--params", param, ..rest] ->
       extract_call_args_helper(rest, [param, ..parameters], abi_file)
+    [arg, ..rest] ->
+      case string.starts_with(arg, "--") {
+        // Unknown flag - treat as remaining args (for --rpc-url, --chain, etc.)
+        True -> #(list.reverse(parameters), abi_file, args)
+        // Positional arg - treat as parameter
+        False ->
+          extract_call_args_helper(rest, [arg, ..parameters], abi_file)
+      }
     [] -> #(list.reverse(parameters), abi_file, [])
   }
 }
