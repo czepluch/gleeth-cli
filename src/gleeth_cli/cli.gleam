@@ -896,225 +896,159 @@ fn parse_abi_lookup_helper(
 
 /// Display help message
 pub fn show_help() -> Nil {
-  io.println("gleeth-cli - Ethereum CLI built on gleeth")
+  io.println("gleeth - Ethereum CLI built on gleeth")
   io.println("")
-  io.println("USAGE:")
-  io.println("  gleeth <COMMAND> [OPTIONS]")
+  io.println("USAGE: gleeth <command> [options]")
   io.println("")
-  io.println("COMMANDS:")
-  io.println("  block-number                    Get latest block number")
-  io.println("  block <number|hash|latest>      Get block details")
+  io.println("GLOBAL OPTIONS:")
+  io.println("  --rpc-url <url>       RPC endpoint URL")
   io.println(
-    "  balance <address> [address2...]  Get balance of one or more addresses",
+    "  --chain <name>        Chain name (resolves via GLEETH_RPC_<CHAIN> env var)",
   )
-  io.println(
-    "  balance --file <filename>        Get balances from file (one address per line)",
-  )
-  io.println(
-    "  call <contract> <function> [params...]  Call a contract function",
-  )
-  io.println("  transaction <hash>              Get transaction details")
-  io.println(
-    "  code <address>                  Get contract bytecode at address",
-  )
-  io.println("  estimate-gas [OPTIONS]          Estimate gas for a transaction")
-  io.println(
-    "  storage-at --address <addr> --slot <slot> [OPTIONS]  Get storage value at slot",
-  )
-  io.println("  get-logs [OPTIONS]              Get event logs with filtering")
-  io.println(
-    "  send [OPTIONS]                  Sign and broadcast a transaction",
-  )
-  io.println("  help                           Show this help message")
+  io.println("  --json                Output as JSON")
   io.println("")
-  io.println("OPTIONS:")
-  io.println("  --rpc-url <URL>                RPC endpoint URL")
-  io.println(
-    "  --chain <name>                 Chain name (mainnet, sepolia have built-in RPCs;",
-  )
-  io.println(
-    "                                 others resolve via GLEETH_RPC_<CHAIN> env var)",
-  )
-  io.println(
-    "  --json                         Output as JSON (supported by most query commands)",
-  )
+  io.println("  Values accept unit suffixes: 1ether, 0.5eth, 10gwei, 21000")
   io.println("")
-  io.println("VALUES:")
-  io.println("  Flags like --value and --gas-limit accept unit suffixes:")
-  io.println("  1ether, 0.5eth, 10gwei, 21000wei, 21000, 0xde0b6b3a7640000")
-  io.println("")
-  io.println("CALL OPTIONS:")
+  io.println("BLOCKCHAIN:")
+  io.println("  block-number                          Latest block number")
+  io.println("  block <number|hash|latest>            Block details")
+  io.println("  chain-id                              Chain ID")
   io.println(
-    "  --abi <file>                   JSON ABI file for typed encoding/decoding",
-  )
-  io.println("")
-  io.println("ESTIMATE-GAS OPTIONS:")
-  io.println("  --from <address>               Sender address (optional)")
-  io.println("  --to <address>                 Recipient address (optional)")
-  io.println("  --value <wei>                  Wei amount to send (optional)")
-  io.println("  --data <hex>                   Transaction data (optional)")
-  io.println("")
-  io.println("STORAGE-AT OPTIONS:")
-  io.println("  --address <address>            Contract address (required)")
-  io.println(
-    "  --slot <hex>                   Storage slot position (required)",
+    "  gas-price                             Gas price and priority fee",
   )
   io.println(
-    "  --block <number|hash|latest>   Block to query (optional, defaults to 'latest')",
+    "  fee-history [options]                 Fee history for recent blocks",
+  )
+  io.println(
+    "    --block-count <n>                     Blocks to query (required)",
+  )
+  io.println(
+    "    --newest-block <block>                Start block (default: latest)",
+  )
+  io.println("    --percentiles <25,50,75>              Reward percentiles")
+  io.println("")
+  io.println("ACCOUNTS:")
+  io.println(
+    "  balance <addr> [addr2 ...]            ETH balance (parallel for multiple)",
+  )
+  io.println(
+    "  balance --file <file>                 Balances from address file",
+  )
+  io.println("  nonce <addr> [--block pending|latest] Transaction count")
+  io.println("")
+  io.println("CONTRACTS:")
+  io.println("  call <contract> <func> [params]       Call a contract function")
+  io.println(
+    "    --abi <file>                          ABI file for typed decoding",
+  )
+  io.println("  code <addr>                           Contract bytecode")
+  io.println(
+    "  estimate-gas [options]                Estimate gas for a transaction",
+  )
+  io.println("    --from <addr>  --to <addr>  --value <amount>  --data <hex>")
+  io.println("  storage-at --address <addr> --slot <hex>  Read storage slot")
+  io.println("    --block <number|hash|latest>          Block to query")
+  io.println("  get-logs [options]                    Query event logs")
+  io.println(
+    "    --from-block <b>  --to-block <b>  --address <addr>  --topic <hex>",
   )
   io.println("")
-  io.println("GET-LOGS OPTIONS:")
+  io.println("TRANSACTIONS:")
   io.println(
-    "  --from-block <number|hash>     Starting block (optional, defaults to 'latest')",
+    "  send [options]                        Sign and broadcast a transaction",
   )
+  io.println("    --to <addr>                           Recipient (required)")
   io.println(
-    "  --to-block <number|hash>       Ending block (optional, defaults to 'latest')",
+    "    --value <amount>                      Amount (e.g. 1ether, 10gwei, 0xde0...)",
   )
+  io.println("    --private-key <hex>                   Sender key (required)")
   io.println(
-    "  --address <address>            Contract address to filter (optional)",
+    "    --gas-limit <amount>                  Gas limit (default: 21000)",
   )
+  io.println("    --data <hex>                          Calldata")
   io.println(
-    "  --topic <hex>                  Topic filter (repeatable for multiple topics)",
+    "    --legacy                              Use Type 0 instead of EIP-1559",
+  )
+  io.println("  transaction <hash>                    Transaction details")
+  io.println("  receipt <hash>                        Transaction receipt")
+  io.println(
+    "  wait <hash> [--timeout <ms>]          Wait for tx to be mined (default: 60s)",
   )
   io.println("")
-  io.println("ENVIRONMENT VARIABLES:")
-  io.println("  GLEETH_RPC_URL                 Default RPC endpoint URL")
+  io.println("WALLET:")
+  io.println(
+    "  wallet generate                       Generate new random wallet",
+  )
+  io.println(
+    "  wallet info -k <key>                  Show wallet info from private key",
+  )
+  io.println("  wallet sign -k <key> -m <msg>         Sign a personal message")
+  io.println(
+    "  wallet verify -p <pubkey> -m <msg> -s <sig>  Verify a signature",
+  )
+  io.println("")
+  io.println("EIP-712:")
+  io.println(
+    "  sign-typed-data <file> -k <key>       Sign typed data from JSON",
+  )
+  io.println(
+    "  sign-typed-data --verify <file> --signature <sig>  Recover signer",
+  )
+  io.println("  sign-typed-data --hash <file>         Compute EIP-712 digest")
+  io.println("")
+  io.println("ABI & SIGNATURES:")
+  io.println(
+    "  selector <sig> [--event]              Function selector or event topic",
+  )
+  io.println("  encode-calldata <sig> [type:val ...]  Encode function calldata")
+  io.println("  decode-calldata <hex> [options]       Decode calldata")
+  io.println("    --signature <sig>                     Function signature")
+  io.println("    --abi <file> [--function <name>]      Or use ABI file")
+  io.println("  decode-revert <hex> [--abi <file>]    Decode revert reason")
+  io.println(
+    "  decode-tx <raw-hex>                   Decode signed raw transaction",
+  )
+  io.println(
+    "  4byte <selector>                      Look up selector (Sourcify)",
+  )
+  io.println(
+    "  abi <addr> [--chain <name>]           Look up verified ABI (Sourcify)",
+  )
+  io.println("    --output <file>                       Save ABI to file")
+  io.println("")
+  io.println("UTILITIES:")
+  io.println("  keccak <input>                        Keccak256 hash of string")
+  io.println(
+    "  keccak --hex <data>                   Keccak256 hash of hex data",
+  )
+  io.println("  checksum <addr>                       EIP-55 checksum address")
+  io.println(
+    "  convert <val> --from <unit> --to <unit>  Convert wei/gwei/ether",
+  )
+  io.println(
+    "  recover [options] <msg> <sig>         Recover signer from signature",
+  )
+  io.println("    --mode pubkey|address|candidates|verify:<addr>")
+  io.println("    --format compact|detailed|json")
+  io.println("")
+  io.println("ENVIRONMENT:")
+  io.println("  GLEETH_RPC_URL          Default RPC endpoint")
+  io.println(
+    "  GLEETH_RPC_<CHAIN>      Per-chain RPC (e.g. GLEETH_RPC_ARBITRUM)",
+  )
   io.println("")
   io.println("EXAMPLES:")
-  io.println("  gleeth block-number --rpc-url https://eth.llamarpc.com")
+  io.println("  gleeth block-number --chain mainnet")
+  io.println("  gleeth block latest --chain mainnet --json")
+  io.println("  gleeth balance 0xd8dA6BF2... --chain mainnet")
   io.println(
-    "  gleeth balance 0x742dBF0b6d9bAA31b82BB5bcB6e0e1C7a5b30000 --rpc-url https://eth.llamarpc.com",
+    "  gleeth send --to 0x7099... --value 1ether --private-key 0xac09... --chain mainnet",
   )
   io.println(
-    "  gleeth balance addr1 addr2 addr3 --rpc-url https://eth.llamarpc.com",
+    "  gleeth call 0xA0b8... balanceOf address:0xd8dA... --chain mainnet",
   )
-  io.println(
-    "  gleeth balance --file addresses.txt --rpc-url https://eth.llamarpc.com",
-  )
-  io.println(
-    "  gleeth call 0xA0b86a33E6Fb7e4f67c5776f8fcB44F56c71d8b8 totalSupply --rpc-url https://eth.llamarpc.com",
-  )
-  io.println(
-    "  gleeth call 0xA0b86a33E6Fb7e4f67c5776f8fcB44F56c71d8b8 balanceOf address:0x742d... --rpc-url https://eth.llamarpc.com",
-  )
-  io.println(
-    "  gleeth send --to 0x7099... --value 0xde0b6b3a7640000 --private-key 0xac09... --rpc-url http://localhost:8545",
-  )
-  io.println(
-    "  gleeth estimate-gas --from 0x742d... --to 0x7a25... --value 0x1000... --rpc-url https://eth.llamarpc.com",
-  )
-  io.println(
-    "  gleeth storage-at --address 0xA0b86a... --slot 0x0 --rpc-url https://eth.llamarpc.com",
-  )
-  io.println(
-    "  gleeth get-logs --address 0xA0b86a... --from-block 0x1000000 --rpc-url https://eth.llamarpc.com",
-  )
-  io.println("")
-  io.println("SEND OPTIONS:")
-  io.println("  --to <address>                 Recipient address (required)")
-  io.println(
-    "  --value <hex>                  Wei amount to send (hex, e.g. 0xde0b6b3a7640000 for 1 ETH)",
-  )
-  io.println("  --private-key <hex>            Sender's private key (required)")
-  io.println(
-    "  --gas-limit <hex>              Gas limit (optional, defaults to 21000)",
-  )
-  io.println("  --data <hex>                   Transaction data (optional)")
-  io.println(
-    "  --legacy                       Use legacy (Type 0) instead of EIP-1559",
-  )
-  io.println("")
-  io.println("WALLET COMMANDS:")
-  io.println("  gleeth wallet create --private-key 0x1234...")
-  io.println("  gleeth wallet generate")
-  io.println("  gleeth wallet info --private-key 0x1234...")
-  io.println(
-    "  gleeth wallet sign --private-key 0x1234... --message 'Hello World'",
-  )
-  io.println("")
-  io.println("ADDITIONAL QUERY COMMANDS:")
-  io.println(
-    "  chain-id                        Get chain ID of connected network",
-  )
-  io.println(
-    "  gas-price                       Get current gas price and priority fee",
-  )
-  io.println(
-    "  fee-history --block-count <n>   Get fee history for recent blocks",
-  )
-  io.println(
-    "  nonce <address>                 Get transaction count (nonce) for address",
-  )
-  io.println("  receipt <hash>                  Get transaction receipt")
-  io.println(
-    "  wait <hash>                     Wait for transaction to be mined",
-  )
-  io.println("")
-  io.println("FEE-HISTORY OPTIONS:")
-  io.println(
-    "  --block-count <n>              Number of blocks to query (required)",
-  )
-  io.println(
-    "  --newest-block <block>         Newest block (optional, defaults to 'latest')",
-  )
-  io.println(
-    "  --percentiles <p1,p2,...>       Reward percentiles (optional, e.g. 25,50,75)",
-  )
-  io.println("")
-  io.println("NONCE OPTIONS:")
-  io.println(
-    "  --block <pending|latest>       Block tag (optional, defaults to 'pending')",
-  )
-  io.println("")
-  io.println("WAIT OPTIONS:")
-  io.println(
-    "  --timeout <ms>                 Timeout in milliseconds (optional, defaults to 60000)",
-  )
-  io.println("")
-  io.println("OFFLINE COMMANDS (no RPC needed):")
-  io.println("  recover [OPTIONS] <msg> <sig>   Recover signer from signature")
-  io.println("  checksum <address>              Get EIP-55 checksummed address")
-  io.println(
-    "  convert <value> --from <unit> --to <unit>  Convert between wei/gwei/ether",
-  )
-  io.println(
-    "  decode-tx <raw-hex>             Decode a signed raw transaction",
-  )
-  io.println("  decode-calldata <hex> [OPTIONS]  Decode contract calldata")
-  io.println("  decode-revert <hex> [--abi <f>]  Decode revert reason")
-  io.println(
-    "  selector <signature> [--event]  Compute function selector or event topic",
-  )
-  io.println("  keccak <input> [--hex]          Compute keccak256 hash")
-  io.println("  encode-calldata <sig> [params]  Encode function calldata")
-  io.println(
-    "  4byte <selector>                Look up function signatures (Sourcify)",
-  )
-  io.println(
-    "  abi <address> [--chain <name>]  Look up verified ABI (Sourcify)",
-  )
-  io.println(
-    "  sign-typed-data <file> -k <key> Sign EIP-712 typed data from JSON file",
-  )
-  io.println(
-    "  sign-typed-data --verify <file> --signature <sig>  Verify EIP-712 signature",
-  )
-  io.println(
-    "  sign-typed-data --hash <file>   Hash EIP-712 typed data (for debugging)",
-  )
-  io.println("")
-  io.println("RECOVER OPTIONS:")
-  io.println(
-    "  --mode <MODE>                  pubkey|address|candidates|verify:<addr>",
-  )
-  io.println("  --format <FORMAT>              compact|detailed|json")
-  io.println("")
-  io.println("DECODE-CALLDATA OPTIONS:")
-  io.println(
-    "  --signature <sig>              Function signature (e.g. transfer(address,uint256))",
-  )
-  io.println(
-    "  --abi <file>                   JSON ABI file (alternative to --signature)",
-  )
-  io.println("  --function <name>              Function name (used with --abi)")
+  io.println("  gleeth selector \"transfer(address,uint256)\"")
+  io.println("  gleeth 4byte 0xa9059cbb")
+  io.println("  gleeth convert 1 --from ether --to wei")
+  io.println("  gleeth sign-typed-data data.json -k 0xac09...")
 }
