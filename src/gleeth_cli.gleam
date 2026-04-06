@@ -26,6 +26,7 @@ import gleeth_cli/commands/receipt
 import gleeth_cli/commands/recover
 import gleeth_cli/commands/selector_cmd
 import gleeth_cli/commands/send
+import gleeth_cli/commands/sign_typed_data
 import gleeth_cli/commands/storage_at
 import gleeth_cli/commands/transaction as transaction_cmd
 import gleeth_cli/commands/wait_receipt
@@ -69,6 +70,12 @@ pub fn main() -> Nil {
                 Error(err) -> print_error(err)
               }
             }
+            cli.SignTypedData(file, key) ->
+              execute_offline(sign_typed_data.execute(file, key))
+            cli.VerifyTypedData(file, sig) ->
+              execute_offline(sign_typed_data.execute_verify(file, sig))
+            cli.HashTypedData(file) ->
+              execute_offline(sign_typed_data.execute_hash(file))
             _ -> {
               case provider.new(parsed_args.rpc_url) {
                 Ok(p) ->
@@ -165,7 +172,10 @@ fn execute_command(
     | cli.Keccak(_, _)
     | cli.EncodeCalldata(_, _)
     | cli.FourByte(_)
-    | cli.AbiLookup(_, _, _) -> Ok(Nil)
+    | cli.AbiLookup(_, _, _)
+    | cli.SignTypedData(_, _)
+    | cli.VerifyTypedData(_, _)
+    | cli.HashTypedData(_) -> Ok(Nil)
   }
 
   case result {

@@ -65,6 +65,9 @@ pub type Command {
   EncodeCalldata(signature: String, params: List(String))
   FourByte(selector: String)
   AbiLookup(address: String, chain: String, output: Option(String))
+  SignTypedData(json_file: String, private_key: String)
+  VerifyTypedData(json_file: String, signature: String)
+  HashTypedData(json_file: String)
 }
 
 /// CLI arguments structure
@@ -259,6 +262,15 @@ fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
       let #(chain, output) = parse_abi_lookup_args(rest)
       Ok(Args(AbiLookup(address, chain, output), "", False))
     }
+
+    ["sign-typed-data", file, "--private-key", key] ->
+      Ok(Args(SignTypedData(file, key), "", False))
+    ["sign-typed-data", file, "-k", key] ->
+      Ok(Args(SignTypedData(file, key), "", False))
+    ["sign-typed-data", "--verify", file, "--signature", sig] ->
+      Ok(Args(VerifyTypedData(file, sig), "", False))
+    ["sign-typed-data", "--hash", file] ->
+      Ok(Args(HashTypedData(file), "", False))
 
     _ ->
       Error(rpc_types.ConfigError(
@@ -1076,10 +1088,19 @@ pub fn show_help() -> Nil {
   io.println("  keccak <input> [--hex]          Compute keccak256 hash")
   io.println("  encode-calldata <sig> [params]  Encode function calldata")
   io.println(
-    "  4byte <selector>                Look up function signatures (4byte.directory)",
+    "  4byte <selector>                Look up function signatures (Sourcify)",
   )
   io.println(
     "  abi <address> [--chain <name>]  Look up verified ABI (Sourcify)",
+  )
+  io.println(
+    "  sign-typed-data <file> -k <key> Sign EIP-712 typed data from JSON file",
+  )
+  io.println(
+    "  sign-typed-data --verify <file> --signature <sig>  Verify EIP-712 signature",
+  )
+  io.println(
+    "  sign-typed-data --hash <file>   Hash EIP-712 typed data (for debugging)",
   )
   io.println("")
   io.println("RECOVER OPTIONS:")

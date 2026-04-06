@@ -159,6 +159,30 @@ gleeth wallet sign --private-key 0x... --message "hello"
 gleeth wallet verify --public-key 0x04... --message "hello" --signature 0x...
 ```
 
+### EIP-712 Typed Data Signing
+
+```sh
+# Sign typed data from a JSON file
+gleeth sign-typed-data typed_data.json --private-key 0x...
+
+# Verify a signature against typed data
+gleeth sign-typed-data --verify typed_data.json --signature 0x...
+
+# Hash typed data (for debugging)
+gleeth sign-typed-data --hash typed_data.json
+```
+
+The JSON file follows the standard EIP-712 format (same as MetaMask/ethers):
+
+```json
+{
+  "types": { "Mail": [{"name": "from", "type": "address"}, ...] },
+  "primaryType": "Mail",
+  "domain": { "name": "MyDapp", "version": "1", "chainId": 1 },
+  "message": { "from": "0x...", "to": "0x...", "contents": "Hello" }
+}
+```
+
 ### ABI and Signature Tools
 
 ```sh
@@ -170,7 +194,7 @@ gleeth encode-calldata "transfer(address,uint256)" \
 gleeth decode-calldata 0xa9059cbb... --signature "transfer(address,uint256)"
 gleeth decode-calldata 0xa9059cbb... --abi erc20.json
 
-# Look up function signatures by 4-byte selector (via 4byte.directory)
+# Look up function signatures by 4-byte selector (via Sourcify)
 gleeth 4byte 0xa9059cbb
 
 # Look up verified contract ABI (via Sourcify)
