@@ -13,6 +13,7 @@ import gleeth_cli/value
 /// CLI command definitions
 pub type Command {
   BlockNumber
+  Block(block_id: String)
   Balance(addresses: List(eth_types.Address), file: Option(String))
   Call(
     contract: eth_types.Address,
@@ -95,6 +96,11 @@ fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
     ["block-number", ..rest] -> {
       use rpc_target <- result.try(extract_rpc_target(rest))
       Ok(Args(BlockNumber, rpc_target, False))
+    }
+
+    ["block", block_id, ..rest] -> {
+      use rpc_target <- result.try(extract_rpc_target(rest))
+      Ok(Args(Block(block_id), rpc_target, False))
     }
 
     ["balance", ..args] -> {
@@ -867,6 +873,7 @@ pub fn show_help() -> Nil {
   io.println("")
   io.println("COMMANDS:")
   io.println("  block-number                    Get latest block number")
+  io.println("  block <number|hash|latest>      Get block details")
   io.println(
     "  balance <address> [address2...]  Get balance of one or more addresses",
   )

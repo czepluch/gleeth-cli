@@ -4,6 +4,7 @@ import gleeth/rpc/types as rpc_types
 import gleeth_cli/cli
 import gleeth_cli/commands/abi_lookup
 import gleeth_cli/commands/balance
+import gleeth_cli/commands/block
 import gleeth_cli/commands/block_number
 import gleeth_cli/commands/call
 import gleeth_cli/commands/chain_id
@@ -146,6 +147,7 @@ fn execute_command(
 ) -> Nil {
   let result = case command {
     cli.BlockNumber -> block_number.execute(p, json)
+    cli.Block(block_id) -> block.execute(p, block_id, json)
     cli.Balance(addresses, file) -> balance.execute(p, addresses, file, json)
     cli.Call(contract, function, parameters, abi_file) ->
       call.execute(p, contract, function, parameters, abi_file)
