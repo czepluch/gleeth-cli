@@ -48,3 +48,15 @@ Key patterns:
 - `send.gleam` supports both legacy (Type 0) and EIP-1559 (Type 2) transactions
 
 **FFI**: `cli.gleam` uses `@external(erlang, "gleeth_ffi", "get_env")` for environment variable access.
+
+## RPC resolution
+
+`--chain` and `--rpc-url` both resolve to an RPC endpoint. `--chain mainnet` and `--chain sepolia` have built-in public RPC fallbacks. Other chains resolve via `GLEETH_RPC_<CHAIN>` env vars (e.g. `GLEETH_RPC_ARBITRUM`). The chain ID is always fetched from the node via `eth_chainId` - no local mapping needed for RPC commands.
+
+The chain name-to-ID mapping in `value.gleam` is only used by the `abi` command (Sourcify lookups) where you need a chain ID without an RPC connection.
+
+## Future work
+
+- **Config file**: Add `~/.gleeth.toml` or similar for persisting RPC endpoints per chain, default options, and aliases. Currently everything is env vars.
+- **ENS resolution**: Needs gleeth library support (namehash, resolver contract calls). Once available, all address arguments should transparently resolve ENS names.
+- **EIP-712 signing**: gleeth has full EIP-712 support (`gleeth/eip712`). Needs a CLI command to sign typed data from a JSON file.

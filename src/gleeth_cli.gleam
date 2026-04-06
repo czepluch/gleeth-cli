@@ -70,7 +70,7 @@ pub fn main() -> Nil {
               }
             }
             _ -> {
-              case create_provider(parsed_args.rpc_target) {
+              case provider.new(parsed_args.rpc_url) {
                 Ok(p) ->
                   execute_command(parsed_args.command, p, parsed_args.json)
                 Error(err) -> print_error(err)
@@ -111,25 +111,6 @@ fn execute_recover_command(recover_args: List(String)) -> Nil {
       formatting.print_error("Invalid recover command: " <> msg)
       recover.print_usage()
     }
-  }
-}
-
-fn create_provider(
-  target: cli.RpcTarget,
-) -> Result(provider.Provider, rpc_types.GleethError) {
-  case target {
-    cli.RpcUrl(url) -> provider.new(url)
-    cli.ChainPreset(name) ->
-      case name {
-        "mainnet" | "ethereum" -> Ok(provider.mainnet())
-        "sepolia" -> Ok(provider.sepolia())
-        _ ->
-          Error(rpc_types.ConfigError(
-            "Chain '"
-            <> name
-            <> "' has no built-in RPC. Use --rpc-url with a provider for this chain.",
-          ))
-      }
   }
 }
 

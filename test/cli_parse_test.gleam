@@ -43,7 +43,7 @@ pub fn parse_block_number_test() {
     cli.parse_args(["block-number", "--rpc-url", "http://localhost:8545"])
     |> should.be_ok
   should.equal(args.command, cli.BlockNumber)
-  should.equal(args.rpc_target, cli.RpcUrl("http://localhost:8545"))
+  should.equal(args.rpc_url, "http://localhost:8545")
 }
 
 pub fn parse_block_number_missing_rpc_test() {
@@ -333,7 +333,7 @@ pub fn parse_chain_id_test() {
     cli.parse_args(["chain-id", "--rpc-url", "http://localhost:8545"])
     |> should.be_ok
   should.equal(args.command, cli.ChainId)
-  should.equal(args.rpc_target, cli.RpcUrl("http://localhost:8545"))
+  should.equal(args.rpc_url, "http://localhost:8545")
 }
 
 // =============================================================================
@@ -504,7 +504,7 @@ pub fn parse_recover_test() {
       should.equal(recover_args, ["--mode", "address", "hello", "0xabcd"])
     _ -> should.fail()
   }
-  should.equal(args.rpc_target, cli.RpcUrl(""))
+  should.equal(args.rpc_url, "")
 }
 
 pub fn parse_checksum_test() {
@@ -519,7 +519,7 @@ pub fn parse_checksum_test() {
       should.equal(addr, "0xd8da6bf26964af9d7eed9e03e53415d37aa96045")
     _ -> should.fail()
   }
-  should.equal(args.rpc_target, cli.RpcUrl(""))
+  should.equal(args.rpc_url, "")
 }
 
 pub fn parse_convert_test() {

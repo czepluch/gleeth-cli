@@ -67,15 +67,9 @@ pub type Command {
   AbiLookup(address: String, chain: String, output: Option(String))
 }
 
-/// How to connect to an Ethereum node
-pub type RpcTarget {
-  RpcUrl(url: String)
-  ChainPreset(name: String)
-}
-
 /// CLI arguments structure
 pub type Args {
-  Args(command: Command, rpc_target: RpcTarget, json: Bool)
+  Args(command: Command, rpc_url: String, json: Bool)
 }
 
 /// Parse command line arguments
@@ -88,109 +82,109 @@ pub fn parse_args(args: List(String)) -> Result(Args, rpc_types.GleethError) {
 
 fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
   case args {
-    [] -> Ok(Args(Help, RpcUrl(""), False))
-    ["help"] -> Ok(Args(Help, RpcUrl(""), False))
-    ["--help"] -> Ok(Args(Help, RpcUrl(""), False))
-    ["-h"] -> Ok(Args(Help, RpcUrl(""), False))
+    [] -> Ok(Args(Help, "", False))
+    ["help"] -> Ok(Args(Help, "", False))
+    ["--help"] -> Ok(Args(Help, "", False))
+    ["-h"] -> Ok(Args(Help, "", False))
 
     ["block-number", ..rest] -> {
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(Args(BlockNumber, rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(Args(BlockNumber, rpc_url, False))
     }
 
     ["block", block_id, ..rest] -> {
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(Args(Block(block_id), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(Args(Block(block_id), rpc_url, False))
     }
 
     ["balance", ..args] -> {
-      use #(addresses, file, rpc_target) <- result.try(parse_balance_args(args))
-      Ok(Args(Balance(addresses, file), rpc_target, False))
+      use #(addresses, file, rpc_url) <- result.try(parse_balance_args(args))
+      Ok(Args(Balance(addresses, file), rpc_url, False))
     }
 
     ["call", contract, function, ..rest] -> {
       use validated_contract <- result.try(validation.validate_address(contract))
       let #(parameters, abi_file, rpc_args) = extract_call_args(rest)
-      use rpc_target <- result.try(extract_rpc_target(rpc_args))
+      use rpc_url <- result.try(extract_rpc_target(rpc_args))
       Ok(Args(
         Call(validated_contract, function, parameters, abi_file),
-        rpc_target,
+        rpc_url,
         False,
       ))
     }
 
     ["transaction", hash, ..rest] -> {
       use validated_hash <- result.try(validation.validate_hash(hash))
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(Args(Transaction(validated_hash), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(Args(Transaction(validated_hash), rpc_url, False))
     }
 
     ["code", address, ..rest] -> {
       use validated_address <- result.try(validation.validate_address(address))
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(Args(Code(validated_address), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(Args(Code(validated_address), rpc_url, False))
     }
 
     ["estimate-gas", ..rest] -> {
       use #(from, to, value, data, remaining) <- result.try(
         parse_estimate_gas_args(rest),
       )
-      use rpc_target <- result.try(extract_rpc_target(remaining))
-      Ok(Args(EstimateGas(from, to, value, data), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(remaining))
+      Ok(Args(EstimateGas(from, to, value, data), rpc_url, False))
     }
 
     ["storage-at", ..rest] -> {
       use #(address, slot, block, remaining) <- result.try(
         parse_storage_at_args(rest),
       )
-      use rpc_target <- result.try(extract_rpc_target(remaining))
-      Ok(Args(StorageAt(address, slot, block), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(remaining))
+      Ok(Args(StorageAt(address, slot, block), rpc_url, False))
     }
 
     ["get-logs", ..rest] -> {
       use #(from_block, to_block, address, topics, remaining) <- result.try(
         parse_get_logs_args(rest),
       )
-      use rpc_target <- result.try(extract_rpc_target(remaining))
-      Ok(Args(GetLogs(from_block, to_block, address, topics), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(remaining))
+      Ok(Args(GetLogs(from_block, to_block, address, topics), rpc_url, False))
     }
 
     ["send", ..rest] -> {
       use #(to, value, private_key, gas_limit, data, legacy, remaining) <- result.try(
         parse_send_args(rest),
       )
-      use rpc_target <- result.try(extract_rpc_target(remaining))
+      use rpc_url <- result.try(extract_rpc_target(remaining))
       Ok(Args(
         Send(to, value, private_key, gas_limit, data, legacy),
-        rpc_target,
+        rpc_url,
         False,
       ))
     }
 
     ["wallet", ..wallet_args] -> {
       // Wallet commands don't require RPC URL
-      Ok(Args(Wallet(wallet_args), RpcUrl(""), False))
+      Ok(Args(Wallet(wallet_args), "", False))
     }
 
     // RPC commands
     ["chain-id", ..rest] -> {
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(Args(ChainId, rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(Args(ChainId, rpc_url, False))
     }
 
     ["gas-price", ..rest] -> {
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(Args(GasPrice, rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(Args(GasPrice, rpc_url, False))
     }
 
     ["fee-history", ..rest] -> {
       use #(block_count, newest_block, percentiles, remaining) <- result.try(
         parse_fee_history_args(rest),
       )
-      use rpc_target <- result.try(extract_rpc_target(remaining))
+      use rpc_url <- result.try(extract_rpc_target(remaining))
       Ok(Args(
         FeeHistory(block_count, newest_block, percentiles),
-        rpc_target,
+        rpc_url,
         False,
       ))
     }
@@ -198,39 +192,39 @@ fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
     ["nonce", address, ..rest] -> {
       use validated_address <- result.try(validation.validate_address(address))
       use #(block, remaining) <- result.try(parse_nonce_args(rest))
-      use rpc_target <- result.try(extract_rpc_target(remaining))
-      Ok(Args(Nonce(validated_address, block), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(remaining))
+      Ok(Args(Nonce(validated_address, block), rpc_url, False))
     }
 
     ["receipt", hash, ..rest] -> {
       use validated_hash <- result.try(validation.validate_hash(hash))
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(Args(Receipt(validated_hash), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(Args(Receipt(validated_hash), rpc_url, False))
     }
 
     ["wait", hash, ..rest] -> {
       use validated_hash <- result.try(validation.validate_hash(hash))
       use #(timeout, remaining) <- result.try(parse_wait_args(rest))
-      use rpc_target <- result.try(extract_rpc_target(remaining))
-      Ok(Args(Wait(validated_hash, timeout), rpc_target, False))
+      use rpc_url <- result.try(extract_rpc_target(remaining))
+      Ok(Args(Wait(validated_hash, timeout), rpc_url, False))
     }
 
     // Offline commands
     ["recover", ..recover_args] -> {
-      Ok(Args(Recover(recover_args), RpcUrl(""), False))
+      Ok(Args(Recover(recover_args), "", False))
     }
 
     ["checksum", address] -> {
-      Ok(Args(Checksum(address), RpcUrl(""), False))
+      Ok(Args(Checksum(address), "", False))
     }
 
     ["convert", value, ..rest] -> {
       use #(from_unit, to_unit) <- result.try(parse_convert_args(rest))
-      Ok(Args(Convert(value, from_unit, to_unit), RpcUrl(""), False))
+      Ok(Args(Convert(value, from_unit, to_unit), "", False))
     }
 
     ["decode-tx", raw_hex] -> {
-      Ok(Args(DecodeTx(raw_hex), RpcUrl(""), False))
+      Ok(Args(DecodeTx(raw_hex), "", False))
     }
 
     ["decode-calldata", calldata, ..rest] -> {
@@ -238,33 +232,32 @@ fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
         parse_decode_calldata_args(rest)
       Ok(Args(
         DecodeCalldata(calldata, signature, abi_file, function_name),
-        RpcUrl(""),
+        "",
         False,
       ))
     }
 
     ["decode-revert", data, ..rest] -> {
       let abi_file = parse_decode_revert_args(rest)
-      Ok(Args(DecodeRevert(data, abi_file), RpcUrl(""), False))
+      Ok(Args(DecodeRevert(data, abi_file), "", False))
     }
 
     ["selector", signature, ..rest] -> {
       let is_event = parse_selector_args(rest)
-      Ok(Args(Selector(signature, is_event), RpcUrl(""), False))
+      Ok(Args(Selector(signature, is_event), "", False))
     }
 
-    ["keccak", "--hex", input] ->
-      Ok(Args(Keccak(input, True), RpcUrl(""), False))
-    ["keccak", input] -> Ok(Args(Keccak(input, False), RpcUrl(""), False))
+    ["keccak", "--hex", input] -> Ok(Args(Keccak(input, True), "", False))
+    ["keccak", input] -> Ok(Args(Keccak(input, False), "", False))
 
     ["encode-calldata", signature, ..params] ->
-      Ok(Args(EncodeCalldata(signature, params), RpcUrl(""), False))
+      Ok(Args(EncodeCalldata(signature, params), "", False))
 
-    ["4byte", selector] -> Ok(Args(FourByte(selector), RpcUrl(""), False))
+    ["4byte", selector] -> Ok(Args(FourByte(selector), "", False))
 
     ["abi", address, ..rest] -> {
       let #(chain, output) = parse_abi_lookup_args(rest)
-      Ok(Args(AbiLookup(address, chain, output), RpcUrl(""), False))
+      Ok(Args(AbiLookup(address, chain, output), "", False))
     }
 
     _ ->
@@ -274,22 +267,19 @@ fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
   }
 }
 
-// Extract RPC target from remaining arguments
+// Extract RPC URL from remaining arguments.
+// --rpc-url takes a URL directly.
+// --chain resolves via GLEETH_RPC_<CHAIN> env var, with built-in
+// fallbacks for mainnet and sepolia.
 fn extract_rpc_target(
   args: List(String),
-) -> Result(RpcTarget, rpc_types.GleethError) {
+) -> Result(String, rpc_types.GleethError) {
   case args {
-    ["--rpc-url", url, ..] -> Ok(RpcUrl(url))
-    ["--chain", name, ..] -> {
-      use _ <- result.try(
-        value.chain_name_to_id(name)
-        |> result.map_error(rpc_types.ConfigError),
-      )
-      Ok(ChainPreset(name))
-    }
+    ["--rpc-url", url, ..] -> Ok(url)
+    ["--chain", name, ..] -> resolve_chain_rpc(name)
     [] -> {
       case get_env_rpc_url() {
-        Ok(url) -> Ok(RpcUrl(url))
+        Ok(url) -> Ok(url)
         Error(_) ->
           Error(rpc_types.ConfigError(
             "RPC URL required. Use --rpc-url, --chain <name>, or set GLEETH_RPC_URL.",
@@ -303,21 +293,43 @@ fn extract_rpc_target(
   }
 }
 
+// Resolve a chain name to an RPC URL.
+// Priority: GLEETH_RPC_<CHAIN> env var > built-in defaults.
+fn resolve_chain_rpc(name: String) -> Result(String, rpc_types.GleethError) {
+  let env_key = "GLEETH_RPC_" <> string.uppercase(name)
+  case get_env(env_key) {
+    Ok(url) -> Ok(url)
+    Error(_) ->
+      case string.lowercase(name) {
+        "mainnet" | "ethereum" -> Ok("https://eth.llamarpc.com")
+        "sepolia" -> Ok("https://ethereum-sepolia.publicnode.com")
+        _ ->
+          Error(rpc_types.ConfigError(
+            "No RPC URL for chain '"
+            <> name
+            <> "'. Set "
+            <> env_key
+            <> " or use --rpc-url.",
+          ))
+      }
+  }
+}
+
 // Parse balance command arguments - supports multiple addresses and --file
 fn parse_balance_args(
   args: List(String),
 ) -> Result(
-  #(List(eth_types.Address), Option(String), RpcTarget),
+  #(List(eth_types.Address), Option(String), String),
   rpc_types.GleethError,
 ) {
   case args {
     ["--file", filename, ..rest] -> {
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(#([], Some(filename), rpc_target))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(#([], Some(filename), rpc_url))
     }
     ["-f", filename, ..rest] -> {
-      use rpc_target <- result.try(extract_rpc_target(rest))
-      Ok(#([], Some(filename), rpc_target))
+      use rpc_url <- result.try(extract_rpc_target(rest))
+      Ok(#([], Some(filename), rpc_url))
     }
     _ -> {
       let #(address_args, remaining) = split_until_flag(args)
@@ -330,8 +342,8 @@ fn parse_balance_args(
           use validated_addresses <- result.try(validation.validate_addresses(
             address_args,
           ))
-          use rpc_target <- result.try(extract_rpc_target(remaining))
-          Ok(#(validated_addresses, None, rpc_target))
+          use rpc_url <- result.try(extract_rpc_target(remaining))
+          Ok(#(validated_addresses, None, rpc_url))
         }
       }
     }
@@ -384,8 +396,7 @@ fn extract_call_args_helper(
         // Unknown flag - treat as remaining args (for --rpc-url, --chain, etc.)
         True -> #(list.reverse(parameters), abi_file, args)
         // Positional arg - treat as parameter
-        False ->
-          extract_call_args_helper(rest, [arg, ..parameters], abi_file)
+        False -> extract_call_args_helper(rest, [arg, ..parameters], abi_file)
       }
     [] -> #(list.reverse(parameters), abi_file, [])
   }
@@ -906,7 +917,12 @@ pub fn show_help() -> Nil {
   io.println("")
   io.println("OPTIONS:")
   io.println("  --rpc-url <URL>                RPC endpoint URL")
-  io.println("  --chain <name>                 Chain preset (mainnet, sepolia)")
+  io.println(
+    "  --chain <name>                 Chain name (mainnet, sepolia have built-in RPCs;",
+  )
+  io.println(
+    "                                 others resolve via GLEETH_RPC_<CHAIN> env var)",
+  )
   io.println(
     "  --json                         Output as JSON (supported by most query commands)",
   )

@@ -40,17 +40,25 @@ Set `GLEETH_RPC_URL` to avoid passing `--rpc-url` with every command:
 export GLEETH_RPC_URL=http://localhost:8545
 ```
 
-Or use a chain preset:
+Or use a chain name (`mainnet` and `sepolia` have built-in public RPCs):
 
 ```sh
 gleeth balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --chain mainnet
+```
+
+For other chains, set an env var and use `--chain`:
+
+```sh
+export GLEETH_RPC_ARBITRUM=https://arb1.arbitrum.io/rpc
+gleeth balance 0x... --chain arbitrum
 ```
 
 ## Global Options
 
 ```
 --rpc-url <URL>    RPC endpoint URL
---chain <name>     Chain preset (mainnet, sepolia)
+--chain <name>     Chain name (resolves via GLEETH_RPC_<CHAIN> env var;
+                   mainnet and sepolia have built-in fallbacks)
 --json             Output as JSON (supported by query commands)
 ```
 
