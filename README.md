@@ -40,10 +40,24 @@ Set `GLEETH_RPC_URL` to avoid passing `--rpc-url` with every command:
 export GLEETH_RPC_URL=http://localhost:8545
 ```
 
-Or pass it explicitly:
+Or use a chain preset:
 
 ```sh
-gleeth block-number --rpc-url http://localhost:8545
+gleeth balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --chain mainnet
+```
+
+## Global Options
+
+```
+--rpc-url <URL>    RPC endpoint URL
+--chain <name>     Chain preset (mainnet, sepolia)
+--json             Output as JSON (supported by query commands)
+```
+
+Values like `--value` and `--gas-limit` accept unit suffixes:
+
+```
+1ether, 0.5eth, 10gwei, 21000wei, 21000, 0xde0b6b3a7640000
 ```
 
 ## Commands
@@ -51,32 +65,28 @@ gleeth block-number --rpc-url http://localhost:8545
 ### Blockchain Queries
 
 ```sh
-# Get latest block number
 gleeth block-number
-
-# Get chain ID
 gleeth chain-id
-
-# Get current gas price and priority fee
 gleeth gas-price
-
-# Get fee history for the last 10 blocks with reward percentiles
 gleeth fee-history --block-count 10 --percentiles 25,50,75
+
+# JSON output for scripting
+gleeth gas-price --chain mainnet --json
 ```
 
 ### Account Queries
 
 ```sh
-# Check balance of an address
+# Check balance
 gleeth balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
-# Check multiple balances at once (queried in parallel)
+# Multiple balances (queried in parallel)
 gleeth balance 0xaddr1 0xaddr2 0xaddr3
 
-# Check balances from a file (one address per line)
+# From a file (one address per line)
 gleeth balance --file addresses.txt
 
-# Get transaction count (nonce)
+# Get nonce
 gleeth nonce 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 ```
 
@@ -98,33 +108,26 @@ gleeth call 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 balanceOf \
 gleeth code 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
 
 # Estimate gas
-gleeth estimate-gas \
-  --from 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
-  --to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
-  --value 0xde0b6b3a7640000
+gleeth estimate-gas --from 0xf39Fd6... --to 0x709979... --value 1ether
 
 # Read contract storage
-gleeth storage-at --address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --slot 0x0
+gleeth storage-at --address 0xA0b869... --slot 0x0
 
 # Query event logs
-gleeth get-logs --address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
-  --from-block 0x1000000 --to-block latest
+gleeth get-logs --address 0xA0b869... --from-block 0x1000000 --to-block latest
 ```
 
 ### Transactions
 
 ```sh
-# Send ETH (EIP-1559)
+# Send ETH (EIP-1559, human-readable value)
 gleeth send \
   --to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
-  --value 0xde0b6b3a7640000 \
+  --value 1ether \
   --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
-# Send ETH (legacy transaction)
-gleeth send \
-  --to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
-  --value 0xde0b6b3a7640000 \
-  --private-key 0x... --legacy
+# Send with legacy transaction type
+gleeth send --to 0x... --value 0.5eth --private-key 0x... --legacy
 
 # Look up a transaction
 gleeth transaction 0xabc123...
@@ -132,56 +135,61 @@ gleeth transaction 0xabc123...
 # Get a transaction receipt
 gleeth receipt 0xabc123...
 
-# Wait for a transaction to be mined (polls with exponential backoff)
+# Wait for a transaction to be mined
 gleeth wait 0xabc123... --timeout 120000
 ```
 
 ### Wallet Management
 
 ```sh
-# Generate a new wallet
 gleeth wallet generate
-
-# Show wallet info from private key
 gleeth wallet info --private-key 0x...
-
-# Sign a message
 gleeth wallet sign --private-key 0x... --message "hello"
-
-# Verify a signature
 gleeth wallet verify --public-key 0x04... --message "hello" --signature 0x...
 ```
 
-### Offline Utilities
-
-These commands run locally without an RPC connection:
+### ABI and Signature Tools
 
 ```sh
-# Compute EIP-55 checksummed address
-gleeth checksum 0xd8da6bf26964af9d7eed9e03e53415d37aa96045
+# Encode calldata from function signature + parameters
+gleeth encode-calldata "transfer(address,uint256)" \
+  address:0xd8dA6BF2... uint256:1000000
 
-# Convert between units
-gleeth convert 1 --from ether --to wei
-gleeth convert 1000000000 --from gwei --to ether
-
-# Compute function selector
-gleeth selector "transfer(address,uint256)"
-
-# Compute event topic
-gleeth selector "Transfer(address,address,uint256)" --event
-
-# Recover signer from signature
-gleeth recover --mode address "hello" 0x...
-
-# Decode a raw signed transaction
-gleeth decode-tx 0x02f8...
-
-# Decode contract calldata
+# Decode calldata
 gleeth decode-calldata 0xa9059cbb... --signature "transfer(address,uint256)"
 gleeth decode-calldata 0xa9059cbb... --abi erc20.json
 
+# Look up function signatures by 4-byte selector (via 4byte.directory)
+gleeth 4byte 0xa9059cbb
+
+# Look up verified contract ABI (via Sourcify)
+gleeth abi 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --chain mainnet
+gleeth abi 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --chain mainnet --output erc20.json
+
 # Decode revert reason
 gleeth decode-revert 0x08c379a0...
+```
+
+### Hashing and Conversion
+
+```sh
+# Compute keccak256 hash
+gleeth keccak "transfer(address,uint256)"
+gleeth keccak --hex 0xdeadbeef
+
+# Compute function selector or event topic
+gleeth selector "transfer(address,uint256)"
+gleeth selector "Transfer(address,address,uint256)" --event
+
+# EIP-55 address checksum
+gleeth checksum 0xd8da6bf26964af9d7eed9e03e53415d37aa96045
+
+# Unit conversion
+gleeth convert 1 --from ether --to wei
+gleeth convert 1000000000 --from gwei --to ether
+
+# Recover signer from signature
+gleeth recover --mode address "hello" 0x...
 ```
 
 ## Development

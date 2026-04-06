@@ -1,3 +1,5 @@
+import gleam/io
+import gleam/json
 import gleam/result
 import gleeth/provider.{type Provider}
 import gleeth/rpc/methods
@@ -9,13 +11,26 @@ pub fn execute(
   provider: Provider,
   address: String,
   block: String,
+  json json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use nonce <- result.try(methods.get_transaction_count(
     provider,
     address,
     block,
   ))
-  formatting.print_labeled_value("Address", address)
-  formatting.format_hex_with_decimal(nonce, "Nonce")
+  case json {
+    True -> {
+      json.object([
+        #("address", json.string(address)),
+        #("nonce", json.string(nonce)),
+      ])
+      |> json.to_string
+      |> io.println
+    }
+    False -> {
+      formatting.print_labeled_value("Address", address)
+      formatting.format_hex_with_decimal(nonce, "Nonce")
+    }
+  }
   Ok(Nil)
 }

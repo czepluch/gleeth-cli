@@ -2,6 +2,7 @@ import argv
 import gleeth/provider
 import gleeth/rpc/types as rpc_types
 import gleeth_cli/cli
+import gleeth_cli/commands/abi_lookup
 import gleeth_cli/commands/balance
 import gleeth_cli/commands/block_number
 import gleeth_cli/commands/call
@@ -12,10 +13,13 @@ import gleeth_cli/commands/convert
 import gleeth_cli/commands/decode_calldata
 import gleeth_cli/commands/decode_revert
 import gleeth_cli/commands/decode_tx
+import gleeth_cli/commands/encode_calldata
 import gleeth_cli/commands/estimate_gas
 import gleeth_cli/commands/fee_history
+import gleeth_cli/commands/four_byte
 import gleeth_cli/commands/gas_price
 import gleeth_cli/commands/get_logs
+import gleeth_cli/commands/keccak
 import gleeth_cli/commands/nonce
 import gleeth_cli/commands/receipt
 import gleeth_cli/commands/recover
@@ -52,9 +56,22 @@ pub fn main() -> Nil {
               execute_offline(decode_revert.execute(data, abi_file))
             cli.Selector(signature, is_event) ->
               execute_offline(selector_cmd.execute(signature, is_event))
+            cli.Keccak(input, is_hex) ->
+              execute_offline(keccak.execute(input, is_hex))
+            cli.FourByte(selector) ->
+              execute_offline(four_byte.execute(selector))
+            cli.AbiLookup(address, chain, output) ->
+              execute_offline(abi_lookup.execute(address, chain, output))
+            cli.EncodeCalldata(signature, params) -> {
+              case encode_calldata.execute(signature, params) {
+                Ok(_) -> Nil
+                Error(err) -> print_error(err)
+              }
+            }
             _ -> {
-              case provider.new(parsed_args.rpc_url) {
-                Ok(p) -> execute_command(parsed_args.command, p)
+              case create_provider(parsed_args.rpc_target) {
+                Ok(p) ->
+                  execute_command(parsed_args.command, p, parsed_args.json)
                 Error(err) -> print_error(err)
               }
             }
@@ -96,6 +113,25 @@ fn execute_recover_command(recover_args: List(String)) -> Nil {
   }
 }
 
+fn create_provider(
+  target: cli.RpcTarget,
+) -> Result(provider.Provider, rpc_types.GleethError) {
+  case target {
+    cli.RpcUrl(url) -> provider.new(url)
+    cli.ChainPreset(name) ->
+      case name {
+        "mainnet" | "ethereum" -> Ok(provider.mainnet())
+        "sepolia" -> Ok(provider.sepolia())
+        _ ->
+          Error(rpc_types.ConfigError(
+            "Chain '"
+            <> name
+            <> "' has no built-in RPC. Use --rpc-url with a provider for this chain.",
+          ))
+      }
+  }
+}
+
 fn execute_offline(result: Result(Nil, String)) -> Nil {
   case result {
     Ok(_) -> Nil
@@ -103,10 +139,14 @@ fn execute_offline(result: Result(Nil, String)) -> Nil {
   }
 }
 
-fn execute_command(command: cli.Command, p: provider.Provider) -> Nil {
+fn execute_command(
+  command: cli.Command,
+  p: provider.Provider,
+  json: Bool,
+) -> Nil {
   let result = case command {
-    cli.BlockNumber -> block_number.execute(p)
-    cli.Balance(addresses, file) -> balance.execute(p, addresses, file)
+    cli.BlockNumber -> block_number.execute(p, json)
+    cli.Balance(addresses, file) -> balance.execute(p, addresses, file, json)
     cli.Call(contract, function, parameters, abi_file) ->
       call.execute(p, contract, function, parameters, abi_file)
     cli.Transaction(hash) -> transaction_cmd.execute(p, hash)
@@ -122,11 +162,11 @@ fn execute_command(command: cli.Command, p: provider.Provider) -> Nil {
         p,
         send.SendArgs(to, value, private_key, gas_limit, data, legacy),
       )
-    cli.ChainId -> chain_id.execute(p)
-    cli.GasPrice -> gas_price.execute(p)
+    cli.ChainId -> chain_id.execute(p, json)
+    cli.GasPrice -> gas_price.execute(p, json)
     cli.FeeHistory(block_count, newest_block, percentiles) ->
       fee_history.execute(p, block_count, newest_block, percentiles)
-    cli.Nonce(address, block) -> nonce.execute(p, address, block)
+    cli.Nonce(address, block) -> nonce.execute(p, address, block, json)
     cli.Receipt(hash) -> receipt.execute(p, hash)
     cli.Wait(hash, timeout) -> wait_receipt.execute(p, hash, timeout)
     // Offline commands, Wallet, and Help are handled in main()
@@ -138,7 +178,11 @@ fn execute_command(command: cli.Command, p: provider.Provider) -> Nil {
     | cli.DecodeTx(_)
     | cli.DecodeCalldata(_, _, _, _)
     | cli.DecodeRevert(_, _)
-    | cli.Selector(_, _) -> Ok(Nil)
+    | cli.Selector(_, _)
+    | cli.Keccak(_, _)
+    | cli.EncodeCalldata(_, _)
+    | cli.FourByte(_)
+    | cli.AbiLookup(_, _, _) -> Ok(Nil)
   }
 
   case result {
