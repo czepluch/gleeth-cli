@@ -68,6 +68,7 @@ pub type Command {
   SignTypedData(json_file: String, private_key: String)
   VerifyTypedData(json_file: String, signature: String)
   HashTypedData(json_file: String)
+  CommandHelp(text: String)
 }
 
 /// CLI arguments structure
@@ -84,6 +85,20 @@ pub fn parse_args(args: List(String)) -> Result(Args, rpc_types.GleethError) {
 }
 
 fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
+  // Check for per-command help: gleeth <command> --help
+  case args {
+    [command, "--help"] | [command, "-h"] ->
+      case command_help(command) {
+        Ok(text) -> Ok(Args(CommandHelp(text), "", False))
+        Error(_) -> parse_command_inner(args)
+      }
+    _ -> parse_command_inner(args)
+  }
+}
+
+fn parse_command_inner(
+  args: List(String),
+) -> Result(Args, rpc_types.GleethError) {
   case args {
     [] -> Ok(Args(Help, "", False))
     ["help"] -> Ok(Args(Help, "", False))
@@ -891,6 +906,458 @@ fn parse_abi_lookup_helper(
       parse_abi_lookup_helper(rest, chain, Some(file))
     ["-o", file, ..rest] -> parse_abi_lookup_helper(rest, chain, Some(file))
     _ -> #(chain, output)
+  }
+}
+
+/// Per-command help text
+fn command_help(command: String) -> Result(String, Nil) {
+  case command {
+    "block-number" ->
+      Ok(
+        "Get the latest block number
+
+Usage: gleeth block-number [options]
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+  --json                Output as JSON",
+      )
+    "block" ->
+      Ok(
+        "Get block details by number, hash, or tag
+
+Usage: gleeth block <number|hash|latest> [options]
+
+Arguments:
+  <number|hash|latest>  Block number (decimal or hex), block hash, or 'latest'
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+  --json                Output as JSON
+
+Examples:
+  gleeth block latest --chain mainnet
+  gleeth block 21000000 --chain mainnet
+  gleeth block 0x75da96... --chain mainnet --json",
+      )
+    "balance" ->
+      Ok(
+        "Get ETH balance for one or more addresses
+
+Usage: gleeth balance <address> [address2 ...] [options]
+       gleeth balance --file <file> [options]
+
+Arguments:
+  <address>             Ethereum address (one or more, queried in parallel)
+  --file, -f <file>     File with one address per line (# comments supported)
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+  --json                Output as JSON (single address only)
+
+Examples:
+  gleeth balance 0xd8dA6BF2... --chain mainnet
+  gleeth balance 0xaddr1 0xaddr2 0xaddr3 --chain mainnet
+  gleeth balance --file addresses.txt --chain mainnet",
+      )
+    "call" ->
+      Ok(
+        "Call a contract function (read-only)
+
+Usage: gleeth call <contract> <function> [params...] [options]
+
+Arguments:
+  <contract>            Contract address
+  <function>            Function name (e.g. balanceOf, totalSupply)
+  [params...]           Parameters as type:value (e.g. address:0x...)
+
+Options:
+  --abi <file>          JSON ABI file for typed encoding/decoding
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+
+Examples:
+  gleeth call 0xA0b8... totalSupply --chain mainnet
+  gleeth call 0xA0b8... balanceOf address:0xd8dA... --chain mainnet
+  gleeth call 0xA0b8... name --abi erc20.json --chain mainnet",
+      )
+    "transaction" ->
+      Ok(
+        "Get transaction details by hash
+
+Usage: gleeth transaction <hash> [options]
+
+Arguments:
+  <hash>                Transaction hash (0x-prefixed, 66 chars)
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name",
+      )
+    "code" ->
+      Ok(
+        "Get contract bytecode at an address
+
+Usage: gleeth code <address> [options]
+
+Arguments:
+  <address>             Contract address
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name",
+      )
+    "estimate-gas" ->
+      Ok(
+        "Estimate gas for a transaction
+
+Usage: gleeth estimate-gas [options]
+
+Options:
+  --from <address>      Sender address
+  --to <address>        Recipient address
+  --value <amount>      Value (e.g. 1ether, 10gwei, 0xde0b...)
+  --data <hex>          Transaction data
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name",
+      )
+    "storage-at" ->
+      Ok(
+        "Read a contract's storage slot
+
+Usage: gleeth storage-at --address <addr> --slot <hex> [options]
+
+Options:
+  --address <address>   Contract address (required)
+  --slot <hex>          Storage slot position (required)
+  --block <tag>         Block number, hash, or 'latest' (default: latest)
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name",
+      )
+    "get-logs" ->
+      Ok(
+        "Query event logs with filtering
+
+Usage: gleeth get-logs [options]
+
+Options:
+  --from-block <b>      Starting block (default: latest)
+  --to-block <b>        Ending block (default: latest)
+  --address <addr>      Contract address to filter
+  --topic <hex>         Topic filter (repeatable for multiple topics)
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name",
+      )
+    "send" ->
+      Ok(
+        "Sign and broadcast a transaction
+
+Usage: gleeth send [options]
+
+Options:
+  --to <address>        Recipient address (required)
+  --value <amount>      Amount to send (e.g. 1ether, 10gwei, 0xde0b...)
+  --private-key <hex>   Sender's private key (required)
+  --gas-limit <amount>  Gas limit (default: 21000)
+  --data <hex>          Transaction calldata
+  --legacy              Use legacy (Type 0) instead of EIP-1559
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+
+Examples:
+  gleeth send --to 0x7099... --value 1ether --private-key 0xac09... --chain mainnet
+  gleeth send --to 0x7099... --value 10gwei --private-key 0x... --legacy",
+      )
+    "chain-id" ->
+      Ok(
+        "Get the chain ID of the connected network
+
+Usage: gleeth chain-id [options]
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+  --json                Output as JSON",
+      )
+    "gas-price" ->
+      Ok(
+        "Get current gas price and max priority fee
+
+Usage: gleeth gas-price [options]
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+  --json                Output as JSON",
+      )
+    "fee-history" ->
+      Ok(
+        "Get fee history for recent blocks
+
+Usage: gleeth fee-history --block-count <n> [options]
+
+Options:
+  --block-count <n>     Number of blocks to query (required)
+  --newest-block <b>    Start block (default: latest)
+  --percentiles <list>  Reward percentiles, comma-separated (e.g. 25,50,75)
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+
+Examples:
+  gleeth fee-history --block-count 10 --percentiles 25,50,75 --chain mainnet",
+      )
+    "nonce" ->
+      Ok(
+        "Get transaction count (nonce) for an address
+
+Usage: gleeth nonce <address> [options]
+
+Arguments:
+  <address>             Ethereum address
+
+Options:
+  --block <tag>         pending or latest (default: pending)
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name
+  --json                Output as JSON",
+      )
+    "receipt" ->
+      Ok(
+        "Get a transaction receipt
+
+Usage: gleeth receipt <hash> [options]
+
+Arguments:
+  <hash>                Transaction hash
+
+Options:
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name",
+      )
+    "wait" ->
+      Ok(
+        "Wait for a transaction to be mined (polls with exponential backoff)
+
+Usage: gleeth wait <hash> [options]
+
+Arguments:
+  <hash>                Transaction hash
+
+Options:
+  --timeout <ms>        Timeout in milliseconds (default: 60000)
+  --rpc-url <url>       RPC endpoint
+  --chain <name>        Chain name",
+      )
+    "wallet" ->
+      Ok(
+        "Manage Ethereum wallets
+
+Usage: gleeth wallet <command> [options]
+
+Commands:
+  generate                              Generate new random wallet
+  create --private-key <key>            Create wallet from private key
+  info --private-key <key>              Show wallet information
+  sign --private-key <key> --message <msg>     Sign a personal message
+  verify --public-key <key> --message <msg> --signature <sig>  Verify
+
+Short flags: -k (private-key), -p (public-key), -m (message), -s (signature)
+
+Examples:
+  gleeth wallet generate
+  gleeth wallet sign -k 0x... -m 'Hello World'",
+      )
+    "recover" ->
+      Ok(
+        "Recover signer from an Ethereum signature
+
+Usage: gleeth recover [options] <message> <signature>
+
+Arguments:
+  <message>             Message that was signed (or 0x-prefixed hash)
+  <signature>           Signature in hex (65 bytes, r+s+v format)
+
+Options:
+  --mode <mode>         pubkey, address, candidates, or verify:<addr>
+  --format <fmt>        compact, detailed, or json
+
+Examples:
+  gleeth recover --mode address 'Hello' 0x...
+  gleeth recover --mode verify:0xf39fd... 'Hello' 0x...
+  gleeth recover --mode pubkey --format json 'Hello' 0x...",
+      )
+    "checksum" ->
+      Ok(
+        "Compute EIP-55 checksummed address
+
+Usage: gleeth checksum <address>
+
+Arguments:
+  <address>             Ethereum address (any case)",
+      )
+    "convert" ->
+      Ok(
+        "Convert between Ethereum units (wei, gwei, ether)
+
+Usage: gleeth convert <value> --from <unit> --to <unit>
+
+Arguments:
+  <value>               Numeric value to convert
+
+Options:
+  --from <unit>         Source unit: wei, gwei, ether
+  --to <unit>           Target unit: wei, gwei, ether
+
+Examples:
+  gleeth convert 1 --from ether --to wei
+  gleeth convert 1000000000 --from gwei --to ether
+  gleeth convert 0.5 --from ether --to gwei",
+      )
+    "decode-tx" ->
+      Ok(
+        "Decode a signed raw transaction
+
+Usage: gleeth decode-tx <raw-hex>
+
+Arguments:
+  <raw-hex>             RLP-encoded signed transaction (0x-prefixed)
+                        Auto-detects legacy (Type 0) and EIP-1559 (Type 2)",
+      )
+    "decode-calldata" ->
+      Ok(
+        "Decode contract calldata into function name and arguments
+
+Usage: gleeth decode-calldata <hex> [options]
+
+Arguments:
+  <hex>                 Calldata hex string (0x-prefixed)
+
+Options (one required):
+  --signature <sig>     Function signature (e.g. transfer(address,uint256))
+  --abi <file>          JSON ABI file
+  --function <name>     Function name (used with --abi)
+
+Examples:
+  gleeth decode-calldata 0xa9059cbb... --signature 'transfer(address,uint256)'
+  gleeth decode-calldata 0xa9059cbb... --abi erc20.json",
+      )
+    "decode-revert" ->
+      Ok(
+        "Decode revert reason from failed transaction data
+
+Usage: gleeth decode-revert <hex> [options]
+
+Arguments:
+  <hex>                 Revert data hex string (0x-prefixed)
+
+Options:
+  --abi <file>          JSON ABI file (for custom error types)
+
+Handles Error(string), Panic(uint256), and custom errors.",
+      )
+    "selector" ->
+      Ok(
+        "Compute function selector or event topic from a signature
+
+Usage: gleeth selector <signature> [options]
+
+Arguments:
+  <signature>           Function or event signature (e.g. transfer(address,uint256))
+
+Options:
+  --event               Compute full 32-byte event topic instead of 4-byte selector
+
+Examples:
+  gleeth selector 'transfer(address,uint256)'
+  gleeth selector 'Transfer(address,address,uint256)' --event",
+      )
+    "keccak" ->
+      Ok(
+        "Compute keccak256 hash
+
+Usage: gleeth keccak <input>
+       gleeth keccak --hex <hex-data>
+
+Arguments:
+  <input>               String to hash
+  --hex <hex-data>      Hex-encoded bytes to hash
+
+Examples:
+  gleeth keccak 'transfer(address,uint256)'
+  gleeth keccak --hex 0xdeadbeef",
+      )
+    "encode-calldata" ->
+      Ok(
+        "Encode function calldata from signature and parameters
+
+Usage: gleeth encode-calldata <signature> [type:value ...]
+
+Arguments:
+  <signature>           Function signature (e.g. transfer(address,uint256))
+  [type:value ...]      Parameters as type:value pairs
+
+Examples:
+  gleeth encode-calldata 'transfer(address,uint256)' address:0xd8dA... uint256:1000000
+  gleeth encode-calldata 'approve(address,uint256)' address:0x... uint256:0xffffffff",
+      )
+    "4byte" ->
+      Ok(
+        "Look up function signatures by 4-byte selector (via Sourcify)
+
+Usage: gleeth 4byte <selector>
+
+Arguments:
+  <selector>            4-byte function selector (0x-prefixed)
+
+Examples:
+  gleeth 4byte 0xa9059cbb",
+      )
+    "abi" ->
+      Ok(
+        "Look up a verified contract's ABI from Sourcify
+
+Usage: gleeth abi <address> [options]
+
+Arguments:
+  <address>             Contract address
+
+Options:
+  --chain <name>        Chain name (default: mainnet)
+  --output, -o <file>   Save ABI to file instead of printing
+
+Examples:
+  gleeth abi 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --chain mainnet
+  gleeth abi 0xA0b8... --chain mainnet --output usdc.json",
+      )
+    "sign-typed-data" ->
+      Ok(
+        "Sign, verify, or hash EIP-712 typed structured data
+
+Usage: gleeth sign-typed-data <file> --private-key <key>   Sign
+       gleeth sign-typed-data --verify <file> --signature <sig>  Verify
+       gleeth sign-typed-data --hash <file>                Hash
+
+Arguments:
+  <file>                JSON file with EIP-712 typed data
+
+Options:
+  --private-key, -k     Private key for signing
+  --verify              Verify mode: recover signer from signature
+  --signature           Signature to verify (hex)
+  --hash                Hash mode: output the EIP-712 digest
+
+The JSON file follows the standard EIP-712 format:
+  {\"types\": {...}, \"primaryType\": \"...\", \"domain\": {...}, \"message\": {...}}
+
+Examples:
+  gleeth sign-typed-data permit.json -k 0xac09...
+  gleeth sign-typed-data --verify permit.json --signature 0x4a0f...
+  gleeth sign-typed-data --hash permit.json",
+      )
+    _ -> Error(Nil)
   }
 }
 

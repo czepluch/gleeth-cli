@@ -1,4 +1,5 @@
 import argv
+import gleam/io
 import gleeth/provider
 import gleeth/rpc/types as rpc_types
 import gleeth_cli/cli
@@ -41,6 +42,7 @@ pub fn main() -> Nil {
         Ok(parsed_args) -> {
           case parsed_args.command {
             cli.Help -> cli.show_help()
+            cli.CommandHelp(text) -> io.println(text)
             cli.Wallet(wallet_args) -> execute_wallet_command(wallet_args)
             cli.Recover(recover_args) -> execute_recover_command(recover_args)
             cli.Checksum(address) -> execute_offline(checksum.execute(address))
@@ -175,7 +177,8 @@ fn execute_command(
     | cli.AbiLookup(_, _, _)
     | cli.SignTypedData(_, _)
     | cli.VerifyTypedData(_, _)
-    | cli.HashTypedData(_) -> Ok(Nil)
+    | cli.HashTypedData(_)
+    | cli.CommandHelp(_) -> Ok(Nil)
   }
 
   case result {
