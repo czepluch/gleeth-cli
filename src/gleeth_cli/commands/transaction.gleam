@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/result
 import gleam/string
 
@@ -14,13 +15,45 @@ import gleeth_cli/formatting
 pub fn execute(
   provider: Provider,
   transaction_hash: String,
+  json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use transaction <- result.try(methods.get_transaction(
     provider,
     transaction_hash,
   ))
-  print_transaction(transaction)
+  case json {
+    True -> print_transaction_json(transaction)
+    False -> print_transaction(transaction)
+  }
   Ok(Nil)
+}
+
+fn print_transaction_json(transaction: eth_types.Transaction) -> Nil {
+  json.object([
+    #("hash", json.string(transaction.hash)),
+    #("block_number", json.string(transaction.block_number)),
+    #("block_hash", json.string(transaction.block_hash)),
+    #("transaction_index", json.string(transaction.transaction_index)),
+    #("from", json.string(transaction.from)),
+    #("to", json.string(transaction.to)),
+    #("value", json.string(transaction.value)),
+    #("gas", json.string(transaction.gas)),
+    #("gas_price", json.string(transaction.gas_price)),
+    #("max_fee_per_gas", json.string(transaction.max_fee_per_gas)),
+    #(
+      "max_priority_fee_per_gas",
+      json.string(transaction.max_priority_fee_per_gas),
+    ),
+    #("input", json.string(transaction.input)),
+    #("nonce", json.string(transaction.nonce)),
+    #("transaction_type", json.string(transaction.transaction_type)),
+    #("chain_id", json.string(transaction.chain_id)),
+    #("v", json.string(transaction.v)),
+    #("r", json.string(transaction.r)),
+    #("s", json.string(transaction.s)),
+  ])
+  |> json.to_string
+  |> io.println
 }
 
 // Print transaction in a nice format

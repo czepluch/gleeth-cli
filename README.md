@@ -59,7 +59,7 @@ gleeth balance 0x... --chain arbitrum
 --rpc-url <URL>    RPC endpoint URL
 --chain <name>     Chain name (resolves via GLEETH_RPC_<CHAIN> env var;
                    mainnet and sepolia have built-in fallbacks)
---json             Output as JSON (supported by query commands)
+--json             Output as JSON (all RPC commands)
 ```
 
 Values like `--value` and `--gas-limit` accept unit suffixes:

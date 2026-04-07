@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/result
 import gleam/string
 import gleeth/ethereum/types as eth_types
@@ -11,9 +12,20 @@ import gleeth/rpc/types as rpc_types
 pub fn execute(
   provider: Provider,
   address: eth_types.Address,
+  json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use code <- result.try(methods.get_code(provider, address))
-  print_code(address, code)
+  case json {
+    True -> {
+      json.object([
+        #("address", json.string(address)),
+        #("code", json.string(code)),
+      ])
+      |> json.to_string
+      |> io.println
+    }
+    False -> print_code(address, code)
+  }
   Ok(Nil)
 }
 

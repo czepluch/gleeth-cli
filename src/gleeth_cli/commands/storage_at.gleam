@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/result
 import gleam/string
 import gleeth/provider.{type Provider}
@@ -13,6 +14,7 @@ pub fn execute(
   address: String,
   slot: String,
   block: String,
+  json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use storage_value <- result.try(methods.get_storage_at(
     provider,
@@ -20,7 +22,18 @@ pub fn execute(
     slot,
     block,
   ))
-  print_storage_info(address, slot, block, storage_value)
+  case json {
+    True -> {
+      json.object([
+        #("address", json.string(address)),
+        #("slot", json.string(slot)),
+        #("value", json.string(storage_value)),
+      ])
+      |> json.to_string
+      |> io.println
+    }
+    False -> print_storage_info(address, slot, block, storage_value)
+  }
   Ok(Nil)
 }
 

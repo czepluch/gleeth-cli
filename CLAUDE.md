@@ -32,7 +32,7 @@ If using mise, `.mise.toml` provides erlang, gleam, and elixir.
 
 **CLI parsing**: `src/gleeth_cli/cli.gleam` - Uses the `clip` library for declarative CLI parsing. The `Command` variant type defines all commands. Each subcommand is a function returning `clip.Command(Result(Args, String))`. The `run(args)` function is the main entry point, with `parse_args` as a backward-compatible wrapper mapping errors to `GleethError`. RPC resolution (`--rpc-url`/`--chain`/`GLEETH_RPC_URL`) is handled by `resolve_rpc`. Special cases (`wallet`, `recover`, `--help`) are handled before clip parsing since they need raw arg passthrough. Named options (`clip.opt`) are parsed before positional args (`clip.arg`/`clip.arg_many`) to prevent greedy consumption.
 
-**Command modules**: `src/gleeth_cli/commands/` - One module per command. Each exposes an `execute` function. RPC commands take a `Provider`; offline commands don't. Some commands accept a `json: Bool` parameter for JSON output.
+**Command modules**: `src/gleeth_cli/commands/` - One module per command. Each exposes an `execute` function. RPC commands take a `Provider` and `json: Bool` for structured JSON output. Offline commands don't need a provider. `receipt.gleam` exports `receipt_to_json` for reuse by `wait_receipt.gleam`.
 
 **Shared utilities**:
 - `value.gleam` - Human-readable value parsing (`1ether`, `10gwei`) and chain name-to-ID mapping

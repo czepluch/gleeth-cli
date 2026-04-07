@@ -1,6 +1,7 @@
 import gleam/float
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/result
 import gleam/string
@@ -16,6 +17,7 @@ pub fn execute(
   to: String,
   value: String,
   data: String,
+  json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use gas_estimate <- result.try(methods.estimate_gas(
     provider,
@@ -24,7 +26,14 @@ pub fn execute(
     value,
     data,
   ))
-  print_gas_estimate(from, to, value, data, gas_estimate)
+  case json {
+    True -> {
+      json.object([#("gas", json.string(gas_estimate))])
+      |> json.to_string
+      |> io.println
+    }
+    False -> print_gas_estimate(from, to, value, data, gas_estimate)
+  }
   Ok(Nil)
 }
 

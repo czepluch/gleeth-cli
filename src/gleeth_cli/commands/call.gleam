@@ -1,6 +1,7 @@
 import gleam/bit_array
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -23,6 +24,7 @@ pub fn execute(
   function_call: String,
   parameters: List(String),
   abi_file: Option(String),
+  json output_json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   // Validate contract address
   use validated_address <- result.try(validation.validate_address(
@@ -45,15 +47,58 @@ pub fn execute(
     call_data,
   ))
 
-  // Display results
-  print_contract_response(
-    contract_address,
-    function_call,
-    parameters,
-    response,
-    abi_file,
-  )
+  case output_json {
+    True -> {
+      // Try to get decoded value
+      let decoded = get_decoded_value(function_call, response, abi_file)
+      let base_fields = [
+        #("contract", json.string(contract_address)),
+        #("function", json.string(function_call)),
+        #("raw_response", json.string(response)),
+      ]
+      let fields = case decoded {
+        Some(val) -> list.append(base_fields, [#("decoded", json.string(val))])
+        None -> base_fields
+      }
+      io.println(json.object(fields) |> json.to_string)
+    }
+    False ->
+      print_contract_response(
+        contract_address,
+        function_call,
+        parameters,
+        response,
+        abi_file,
+      )
+  }
   Ok(Nil)
+}
+
+// Try to decode the response, returning Some(decoded_string) or None
+fn get_decoded_value(
+  function_name: String,
+  response: String,
+  abi_file: Option(String),
+) -> Option(String) {
+  case abi_file {
+    Some(file) -> {
+      case decode_with_abi(file, function_name, response) {
+        Ok(decoded) -> Some(decoded)
+        Error(_) -> {
+          case decode_response(function_name, response) {
+            Ok(decoded) -> Some(decoded)
+            Error(_) -> None
+          }
+        }
+      }
+    }
+    None -> {
+      case decode_response(function_name, response) {
+        Ok(decoded) -> Some(decoded)
+        Error(_) -> None
+      }
+    }
+  }
 }
 
 // Parse parameter strings into ABI type/value pairs

@@ -1,6 +1,7 @@
 import gleam/float
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/result
 import gleam/string
@@ -16,6 +17,7 @@ pub fn execute(
   block_count: Int,
   newest_block: String,
   percentiles: List(Float),
+  json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use history <- result.try(methods.get_fee_history(
     provider,
@@ -23,50 +25,69 @@ pub fn execute(
     newest_block,
     percentiles,
   ))
-  io.println("Fee History:")
-  formatting.print_labeled_value(
-    "Oldest Block",
-    hex.format_block_number(history.oldest_block),
-  )
-  io.println("")
-
-  // Print base fees and gas used ratios
-  list.index_map(history.base_fee_per_gas, fn(fee, i) {
-    let block_label = "Block +" <> int.to_string(i)
-    formatting.print_labeled_value(
-      block_label <> " Base Fee",
-      hex.format_wei_to_gwei(fee),
-    )
-  })
-
-  case list.is_empty(history.gas_used_ratio) {
-    True -> Nil
-    False -> {
-      io.println("")
-      io.println("Gas Used Ratios:")
-      list.index_map(history.gas_used_ratio, fn(ratio, i) {
-        formatting.print_labeled_value(
-          "Block +" <> int.to_string(i),
-          float.to_string(ratio *. 100.0) <> "%",
-        )
-      })
-      Nil
+  case json {
+    True -> {
+      json.object([
+        #("oldest_block", json.string(history.oldest_block)),
+        #("base_fee_per_gas", json.array(history.base_fee_per_gas, json.string)),
+        #("gas_used_ratio", json.array(history.gas_used_ratio, json.float)),
+        #(
+          "reward",
+          json.array(history.reward, fn(rewards) {
+            json.array(rewards, json.string)
+          }),
+        ),
+      ])
+      |> json.to_string
+      |> io.println
     }
-  }
-
-  case list.is_empty(history.reward) {
-    True -> Nil
     False -> {
+      io.println("Fee History:")
+      formatting.print_labeled_value(
+        "Oldest Block",
+        hex.format_block_number(history.oldest_block),
+      )
       io.println("")
-      io.println("Reward Percentiles:")
-      list.index_map(history.reward, fn(rewards, i) {
-        let formatted = list.map(rewards, hex.format_wei_to_gwei)
+
+      // Print base fees and gas used ratios
+      list.index_map(history.base_fee_per_gas, fn(fee, i) {
+        let block_label = "Block +" <> int.to_string(i)
         formatting.print_labeled_value(
-          "Block +" <> int.to_string(i),
-          string.join(formatted, ", "),
+          block_label <> " Base Fee",
+          hex.format_wei_to_gwei(fee),
         )
       })
-      Nil
+
+      case list.is_empty(history.gas_used_ratio) {
+        True -> Nil
+        False -> {
+          io.println("")
+          io.println("Gas Used Ratios:")
+          list.index_map(history.gas_used_ratio, fn(ratio, i) {
+            formatting.print_labeled_value(
+              "Block +" <> int.to_string(i),
+              float.to_string(ratio *. 100.0) <> "%",
+            )
+          })
+          Nil
+        }
+      }
+
+      case list.is_empty(history.reward) {
+        True -> Nil
+        False -> {
+          io.println("")
+          io.println("Reward Percentiles:")
+          list.index_map(history.reward, fn(rewards, i) {
+            let formatted = list.map(rewards, hex.format_wei_to_gwei)
+            formatting.print_labeled_value(
+              "Block +" <> int.to_string(i),
+              string.join(formatted, ", "),
+            )
+          })
+          Nil
+        }
+      }
     }
   }
   Ok(Nil)

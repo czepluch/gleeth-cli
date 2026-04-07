@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/result
 import gleam/string
@@ -15,6 +16,7 @@ pub fn execute(
   to_block: String,
   address: String,
   topics: List(String),
+  json output_json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use logs <- result.try(methods.get_logs(
     provider,
@@ -23,8 +25,25 @@ pub fn execute(
     address,
     topics,
   ))
-  print_logs_info(from_block, to_block, address, topics, logs)
+  case output_json {
+    True -> io.println(json.array(logs, log_to_json) |> json.to_string)
+    False -> print_logs_info(from_block, to_block, address, topics, logs)
+  }
   Ok(Nil)
+}
+
+fn log_to_json(log: eth_types.Log) -> json.Json {
+  json.object([
+    #("address", json.string(log.address)),
+    #("topics", json.array(log.topics, json.string)),
+    #("data", json.string(log.data)),
+    #("block_number", json.string(log.block_number)),
+    #("transaction_hash", json.string(log.transaction_hash)),
+    #("transaction_index", json.string(log.transaction_index)),
+    #("block_hash", json.string(log.block_hash)),
+    #("log_index", json.string(log.log_index)),
+    #("removed", json.bool(log.removed)),
+  ])
 }
 
 // Print logs information in a nice format

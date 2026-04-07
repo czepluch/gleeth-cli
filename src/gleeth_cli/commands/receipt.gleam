@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/result
 import gleeth/ethereum/types as eth_types
@@ -12,10 +13,53 @@ import gleeth_cli/formatting
 pub fn execute(
   provider: Provider,
   hash: String,
+  json output_json: Bool,
 ) -> Result(Nil, rpc_types.GleethError) {
   use receipt <- result.try(methods.get_transaction_receipt(provider, hash))
-  print_receipt(receipt)
+  case output_json {
+    True -> io.println(receipt_to_json(receipt) |> json.to_string)
+    False -> print_receipt(receipt)
+  }
   Ok(Nil)
+}
+
+/// Build a JSON value from a TransactionReceipt (reusable by other modules)
+pub fn receipt_to_json(receipt: eth_types.TransactionReceipt) -> json.Json {
+  json.object([
+    #("transaction_hash", json.string(receipt.transaction_hash)),
+    #("transaction_index", json.string(receipt.transaction_index)),
+    #("block_hash", json.string(receipt.block_hash)),
+    #("block_number", json.string(receipt.block_number)),
+    #("from", json.string(receipt.from)),
+    #("to", json.string(receipt.to)),
+    #("cumulative_gas_used", json.string(receipt.cumulative_gas_used)),
+    #("gas_used", json.string(receipt.gas_used)),
+    #("contract_address", json.string(receipt.contract_address)),
+    #("logs", json.array(receipt.logs, log_to_json)),
+    #("logs_bloom", json.string(receipt.logs_bloom)),
+    #(
+      "status",
+      json.string(case receipt.status {
+        eth_types.Success -> "success"
+        eth_types.Failed -> "failed"
+      }),
+    ),
+    #("effective_gas_price", json.string(receipt.effective_gas_price)),
+  ])
+}
+
+fn log_to_json(log: eth_types.Log) -> json.Json {
+  json.object([
+    #("address", json.string(log.address)),
+    #("topics", json.array(log.topics, json.string)),
+    #("data", json.string(log.data)),
+    #("block_number", json.string(log.block_number)),
+    #("transaction_hash", json.string(log.transaction_hash)),
+    #("transaction_index", json.string(log.transaction_index)),
+    #("block_hash", json.string(log.block_hash)),
+    #("log_index", json.string(log.log_index)),
+    #("removed", json.bool(log.removed)),
+  ])
 }
 
 /// Print formatted transaction receipt

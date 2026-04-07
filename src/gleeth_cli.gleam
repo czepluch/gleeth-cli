@@ -140,27 +140,28 @@ fn execute_command(
     cli.Block(block_id) -> block.execute(p, block_id, json)
     cli.Balance(addresses, file) -> balance.execute(p, addresses, file, json)
     cli.Call(contract, function, parameters, abi_file) ->
-      call.execute(p, contract, function, parameters, abi_file)
-    cli.Transaction(hash) -> transaction_cmd.execute(p, hash)
-    cli.Code(address) -> code.execute(p, address)
+      call.execute(p, contract, function, parameters, abi_file, json)
+    cli.Transaction(hash) -> transaction_cmd.execute(p, hash, json)
+    cli.Code(address) -> code.execute(p, address, json)
     cli.EstimateGas(from, to, value, data) ->
-      estimate_gas.execute(p, from, to, value, data)
+      estimate_gas.execute(p, from, to, value, data, json)
     cli.StorageAt(address, slot, block) ->
-      storage_at.execute(p, address, slot, block)
+      storage_at.execute(p, address, slot, block, json)
     cli.GetLogs(from_block, to_block, address, topics) ->
-      get_logs.execute(p, from_block, to_block, address, topics)
+      get_logs.execute(p, from_block, to_block, address, topics, json)
     cli.Send(to, value, private_key, gas_limit, data, legacy) ->
       send.execute(
         p,
         send.SendArgs(to, value, private_key, gas_limit, data, legacy),
+        json,
       )
     cli.ChainId -> chain_id.execute(p, json)
     cli.GasPrice -> gas_price.execute(p, json)
     cli.FeeHistory(block_count, newest_block, percentiles) ->
-      fee_history.execute(p, block_count, newest_block, percentiles)
+      fee_history.execute(p, block_count, newest_block, percentiles, json)
     cli.Nonce(address, block) -> nonce.execute(p, address, block, json)
-    cli.Receipt(hash) -> receipt.execute(p, hash)
-    cli.Wait(hash, timeout) -> wait_receipt.execute(p, hash, timeout)
+    cli.Receipt(hash) -> receipt.execute(p, hash, json)
+    cli.Wait(hash, timeout) -> wait_receipt.execute(p, hash, timeout, json)
     // Offline commands, Wallet, and Help are handled in main()
     cli.Wallet(_)
     | cli.Help
