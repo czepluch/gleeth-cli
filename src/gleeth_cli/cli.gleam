@@ -1,3 +1,8 @@
+import clip
+import clip/arg
+import clip/flag
+import clip/help
+import clip/opt
 import gleam/float
 import gleam/int
 import gleam/io
@@ -76,1288 +81,50 @@ pub type Args {
   Args(command: Command, rpc_url: String, json: Bool)
 }
 
-/// Parse command line arguments
-pub fn parse_args(args: List(String)) -> Result(Args, rpc_types.GleethError) {
-  let json = list.contains(args, "--json")
-  let args = list.filter(args, fn(a) { a != "--json" })
-  use result <- result.try(parse_command(args))
-  Ok(Args(..result, json: json))
-}
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
-fn parse_command(args: List(String)) -> Result(Args, rpc_types.GleethError) {
-  // Check for per-command help: gleeth <command> --help
+/// Main entry point: parse a list of CLI arguments into Args using clip.
+pub fn run(args: List(String)) -> Result(Args, String) {
+  // Handle special cases before clip parsing
   case args {
-    [command, "--help"] | [command, "-h"] ->
-      case command_help(command) {
-        Ok(text) -> Ok(Args(CommandHelp(text), "", False))
-        Error(_) -> parse_command_inner(args)
+    [] | ["help"] | ["--help"] | ["-h"] -> Ok(Args(Help, "", False))
+    ["wallet", ..wallet_args] -> Ok(Args(Wallet(wallet_args), "", False))
+    ["recover", ..recover_args] -> Ok(Args(Recover(recover_args), "", False))
+    _ -> {
+      case clip.run(cli_command(), args) {
+        Ok(Ok(parsed)) -> Ok(parsed)
+        Ok(Error(msg)) -> Error(msg)
+        Error(msg) -> Error(msg)
       }
-    _ -> parse_command_inner(args)
+    }
   }
 }
 
-fn parse_command_inner(
-  args: List(String),
-) -> Result(Args, rpc_types.GleethError) {
-  case args {
-    [] -> Ok(Args(Help, "", False))
-    ["help"] -> Ok(Args(Help, "", False))
-    ["--help"] -> Ok(Args(Help, "", False))
-    ["-h"] -> Ok(Args(Help, "", False))
-
-    ["block-number", ..rest] -> {
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(Args(BlockNumber, rpc_url, False))
-    }
-
-    ["block", block_id, ..rest] -> {
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(Args(Block(block_id), rpc_url, False))
-    }
-
-    ["balance", ..args] -> {
-      use #(addresses, file, rpc_url) <- result.try(parse_balance_args(args))
-      Ok(Args(Balance(addresses, file), rpc_url, False))
-    }
-
-    ["call", contract, function, ..rest] -> {
-      use validated_contract <- result.try(validation.validate_address(contract))
-      let #(parameters, abi_file, rpc_args) = extract_call_args(rest)
-      use rpc_url <- result.try(extract_rpc_target(rpc_args))
-      Ok(Args(
-        Call(validated_contract, function, parameters, abi_file),
-        rpc_url,
-        False,
-      ))
-    }
-
-    ["transaction", hash, ..rest] -> {
-      use validated_hash <- result.try(validation.validate_hash(hash))
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(Args(Transaction(validated_hash), rpc_url, False))
-    }
-
-    ["code", address, ..rest] -> {
-      use validated_address <- result.try(validation.validate_address(address))
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(Args(Code(validated_address), rpc_url, False))
-    }
-
-    ["estimate-gas", ..rest] -> {
-      use #(from, to, value, data, remaining) <- result.try(
-        parse_estimate_gas_args(rest),
-      )
-      use rpc_url <- result.try(extract_rpc_target(remaining))
-      Ok(Args(EstimateGas(from, to, value, data), rpc_url, False))
-    }
-
-    ["storage-at", ..rest] -> {
-      use #(address, slot, block, remaining) <- result.try(
-        parse_storage_at_args(rest),
-      )
-      use rpc_url <- result.try(extract_rpc_target(remaining))
-      Ok(Args(StorageAt(address, slot, block), rpc_url, False))
-    }
-
-    ["get-logs", ..rest] -> {
-      use #(from_block, to_block, address, topics, remaining) <- result.try(
-        parse_get_logs_args(rest),
-      )
-      use rpc_url <- result.try(extract_rpc_target(remaining))
-      Ok(Args(GetLogs(from_block, to_block, address, topics), rpc_url, False))
-    }
-
-    ["send", ..rest] -> {
-      use #(to, value, private_key, gas_limit, data, legacy, remaining) <- result.try(
-        parse_send_args(rest),
-      )
-      use rpc_url <- result.try(extract_rpc_target(remaining))
-      Ok(Args(
-        Send(to, value, private_key, gas_limit, data, legacy),
-        rpc_url,
-        False,
-      ))
-    }
-
-    ["wallet", ..wallet_args] -> {
-      // Wallet commands don't require RPC URL
-      Ok(Args(Wallet(wallet_args), "", False))
-    }
-
-    // RPC commands
-    ["chain-id", ..rest] -> {
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(Args(ChainId, rpc_url, False))
-    }
-
-    ["gas-price", ..rest] -> {
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(Args(GasPrice, rpc_url, False))
-    }
-
-    ["fee-history", ..rest] -> {
-      use #(block_count, newest_block, percentiles, remaining) <- result.try(
-        parse_fee_history_args(rest),
-      )
-      use rpc_url <- result.try(extract_rpc_target(remaining))
-      Ok(Args(
-        FeeHistory(block_count, newest_block, percentiles),
-        rpc_url,
-        False,
-      ))
-    }
-
-    ["nonce", address, ..rest] -> {
-      use validated_address <- result.try(validation.validate_address(address))
-      use #(block, remaining) <- result.try(parse_nonce_args(rest))
-      use rpc_url <- result.try(extract_rpc_target(remaining))
-      Ok(Args(Nonce(validated_address, block), rpc_url, False))
-    }
-
-    ["receipt", hash, ..rest] -> {
-      use validated_hash <- result.try(validation.validate_hash(hash))
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(Args(Receipt(validated_hash), rpc_url, False))
-    }
-
-    ["wait", hash, ..rest] -> {
-      use validated_hash <- result.try(validation.validate_hash(hash))
-      use #(timeout, remaining) <- result.try(parse_wait_args(rest))
-      use rpc_url <- result.try(extract_rpc_target(remaining))
-      Ok(Args(Wait(validated_hash, timeout), rpc_url, False))
-    }
-
-    // Offline commands
-    ["recover", ..recover_args] -> {
-      Ok(Args(Recover(recover_args), "", False))
-    }
-
-    ["checksum", address] -> {
-      Ok(Args(Checksum(address), "", False))
-    }
-
-    ["convert", value, ..rest] -> {
-      use #(from_unit, to_unit) <- result.try(parse_convert_args(rest))
-      Ok(Args(Convert(value, from_unit, to_unit), "", False))
-    }
-
-    ["decode-tx", raw_hex] -> {
-      Ok(Args(DecodeTx(raw_hex), "", False))
-    }
-
-    ["decode-calldata", calldata, ..rest] -> {
-      let #(signature, abi_file, function_name) =
-        parse_decode_calldata_args(rest)
-      Ok(Args(
-        DecodeCalldata(calldata, signature, abi_file, function_name),
-        "",
-        False,
-      ))
-    }
-
-    ["decode-revert", data, ..rest] -> {
-      let abi_file = parse_decode_revert_args(rest)
-      Ok(Args(DecodeRevert(data, abi_file), "", False))
-    }
-
-    ["selector", signature, ..rest] -> {
-      let is_event = parse_selector_args(rest)
-      Ok(Args(Selector(signature, is_event), "", False))
-    }
-
-    ["keccak", "--hex", input] -> Ok(Args(Keccak(input, True), "", False))
-    ["keccak", input] -> Ok(Args(Keccak(input, False), "", False))
-
-    ["encode-calldata", signature, ..params] ->
-      Ok(Args(EncodeCalldata(signature, params), "", False))
-
-    ["4byte", selector] -> Ok(Args(FourByte(selector), "", False))
-
-    ["abi", address, ..rest] -> {
-      let #(chain, output) = parse_abi_lookup_args(rest)
-      Ok(Args(AbiLookup(address, chain, output), "", False))
-    }
-
-    ["sign-typed-data", file, "--private-key", key] ->
-      Ok(Args(SignTypedData(file, key), "", False))
-    ["sign-typed-data", file, "-k", key] ->
-      Ok(Args(SignTypedData(file, key), "", False))
-    ["sign-typed-data", "--verify", file, "--signature", sig] ->
-      Ok(Args(VerifyTypedData(file, sig), "", False))
-    ["sign-typed-data", "--hash", file] ->
-      Ok(Args(HashTypedData(file), "", False))
-
-    _ ->
-      Error(rpc_types.ConfigError(
-        "Invalid command. Use --help for usage information.",
-      ))
-  }
+/// Backward-compatible wrapper that maps String errors to GleethError.
+pub fn parse_args(args: List(String)) -> Result(Args, rpc_types.GleethError) {
+  run(args)
+  |> result.map_error(rpc_types.ConfigError)
 }
 
-// Extract RPC URL from remaining arguments.
-// --rpc-url takes a URL directly.
-// --chain resolves via GLEETH_RPC_<CHAIN> env var, with built-in
-// fallbacks for mainnet and sepolia.
-fn extract_rpc_target(
-  args: List(String),
-) -> Result(String, rpc_types.GleethError) {
-  case args {
-    ["--rpc-url", url, ..] -> Ok(url)
-    ["--chain", name, ..] -> resolve_chain_rpc(name)
-    [] -> {
-      case get_env_rpc_url() {
+/// Resolve --rpc-url / --chain to a URL.
+/// Both are optional; exactly one should be provided, or GLEETH_RPC_URL is used.
+pub fn resolve_rpc(
+  rpc_url: Result(String, Nil),
+  chain: Result(String, Nil),
+) -> Result(String, String) {
+  case rpc_url, chain {
+    Ok(url), _ -> Ok(url)
+    _, Ok(name) -> resolve_chain_rpc(name)
+    Error(_), Error(_) ->
+      case get_env("GLEETH_RPC_URL") {
         Ok(url) -> Ok(url)
         Error(_) ->
-          Error(rpc_types.ConfigError(
+          Error(
             "RPC URL required. Use --rpc-url, --chain <name>, or set GLEETH_RPC_URL.",
-          ))
+          )
       }
-    }
-    _ ->
-      Error(rpc_types.ConfigError(
-        "Invalid arguments. Use --rpc-url <url> or --chain <name>.",
-      ))
-  }
-}
-
-// Resolve a chain name to an RPC URL.
-// Priority: GLEETH_RPC_<CHAIN> env var > built-in defaults.
-fn resolve_chain_rpc(name: String) -> Result(String, rpc_types.GleethError) {
-  let env_key = "GLEETH_RPC_" <> string.uppercase(name)
-  case get_env(env_key) {
-    Ok(url) -> Ok(url)
-    Error(_) ->
-      case string.lowercase(name) {
-        "mainnet" | "ethereum" -> Ok("https://eth.llamarpc.com")
-        "sepolia" -> Ok("https://ethereum-sepolia.publicnode.com")
-        _ ->
-          Error(rpc_types.ConfigError(
-            "No RPC URL for chain '"
-            <> name
-            <> "'. Set "
-            <> env_key
-            <> " or use --rpc-url.",
-          ))
-      }
-  }
-}
-
-// Parse balance command arguments - supports multiple addresses and --file
-fn parse_balance_args(
-  args: List(String),
-) -> Result(
-  #(List(eth_types.Address), Option(String), String),
-  rpc_types.GleethError,
-) {
-  case args {
-    ["--file", filename, ..rest] -> {
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(#([], Some(filename), rpc_url))
-    }
-    ["-f", filename, ..rest] -> {
-      use rpc_url <- result.try(extract_rpc_target(rest))
-      Ok(#([], Some(filename), rpc_url))
-    }
-    _ -> {
-      let #(address_args, remaining) = split_until_flag(args)
-      case address_args {
-        [] ->
-          Error(rpc_types.ConfigError(
-            "At least one address or --file must be specified",
-          ))
-        _ -> {
-          use validated_addresses <- result.try(validation.validate_addresses(
-            address_args,
-          ))
-          use rpc_url <- result.try(extract_rpc_target(remaining))
-          Ok(#(validated_addresses, None, rpc_url))
-        }
-      }
-    }
-  }
-}
-
-// Split arguments until we hit a flag (--rpc-url, --file, etc.)
-fn split_until_flag(args: List(String)) -> #(List(String), List(String)) {
-  case args {
-    [] -> #([], [])
-    [arg, ..rest] -> {
-      case string.starts_with(arg, "--") {
-        True -> #([], args)
-        False -> {
-          let #(addresses, remaining) = split_until_flag(rest)
-          #([arg, ..addresses], remaining)
-        }
-      }
-    }
-  }
-}
-
-// Get RPC URL from the GLEETH_RPC_URL environment variable
-fn get_env_rpc_url() -> Result(String, Nil) {
-  get_env("GLEETH_RPC_URL")
-}
-
-@external(erlang, "gleeth_ffi", "get_env")
-fn get_env(name: String) -> Result(String, Nil)
-
-// Extract parameters, --abi flag, and RPC arguments from call command args
-fn extract_call_args(
-  args: List(String),
-) -> #(List(String), Option(String), List(String)) {
-  extract_call_args_helper(args, [], None)
-}
-
-fn extract_call_args_helper(
-  args: List(String),
-  parameters: List(String),
-  abi_file: Option(String),
-) -> #(List(String), Option(String), List(String)) {
-  case args {
-    ["--abi", file, ..rest] ->
-      extract_call_args_helper(rest, parameters, Some(file))
-    ["--params", param, ..rest] ->
-      extract_call_args_helper(rest, [param, ..parameters], abi_file)
-    [arg, ..rest] ->
-      case string.starts_with(arg, "--") {
-        // Unknown flag - treat as remaining args (for --rpc-url, --chain, etc.)
-        True -> #(list.reverse(parameters), abi_file, args)
-        // Positional arg - treat as parameter
-        False -> extract_call_args_helper(rest, [arg, ..parameters], abi_file)
-      }
-    [] -> #(list.reverse(parameters), abi_file, [])
-  }
-}
-
-// Parse estimate-gas command arguments
-fn parse_estimate_gas_args(
-  args: List(String),
-) -> Result(
-  #(String, String, String, String, List(String)),
-  rpc_types.GleethError,
-) {
-  parse_estimate_gas_args_helper(args, "", "", "", "", [])
-}
-
-// Helper function to parse estimate-gas arguments recursively
-fn parse_estimate_gas_args_helper(
-  args: List(String),
-  from: String,
-  to: String,
-  value: String,
-  data: String,
-  remaining: List(String),
-) -> Result(
-  #(String, String, String, String, List(String)),
-  rpc_types.GleethError,
-) {
-  case args {
-    [] -> Ok(#(from, to, value, data, remaining))
-
-    ["--from", addr, ..rest] -> {
-      use validated_addr <- result.try(validation.validate_address(addr))
-      parse_estimate_gas_args_helper(
-        rest,
-        validated_addr,
-        to,
-        value,
-        data,
-        remaining,
-      )
-    }
-
-    ["--to", addr, ..rest] -> {
-      use validated_addr <- result.try(validation.validate_address(addr))
-      parse_estimate_gas_args_helper(
-        rest,
-        from,
-        validated_addr,
-        value,
-        data,
-        remaining,
-      )
-    }
-
-    ["--value", val, ..rest] -> {
-      use parsed_val <- result.try(
-        value.parse_value(val)
-        |> result.map_error(rpc_types.ConfigError),
-      )
-      parse_estimate_gas_args_helper(
-        rest,
-        from,
-        to,
-        parsed_val,
-        data,
-        remaining,
-      )
-    }
-
-    ["--data", hex_data, ..rest] -> {
-      parse_estimate_gas_args_helper(rest, from, to, value, hex_data, remaining)
-    }
-
-    // Any other arguments (like --rpc-url) go to remaining
-    _ -> Ok(#(from, to, value, data, args))
-  }
-}
-
-// Parse storage-at command arguments
-fn parse_storage_at_args(
-  args: List(String),
-) -> Result(#(String, String, String, List(String)), rpc_types.GleethError) {
-  parse_storage_at_args_helper(args, "", "", "", [])
-}
-
-// Helper function to parse storage-at arguments recursively
-fn parse_storage_at_args_helper(
-  args: List(String),
-  address: String,
-  slot: String,
-  block: String,
-  remaining: List(String),
-) -> Result(#(String, String, String, List(String)), rpc_types.GleethError) {
-  case args {
-    [] -> {
-      // Validate required fields
-      case address == "" || slot == "" {
-        True ->
-          Error(rpc_types.ConfigError(
-            "storage-at requires --address and --slot flags",
-          ))
-        False -> Ok(#(address, slot, block, remaining))
-      }
-    }
-
-    ["--address", addr, ..rest] -> {
-      use validated_addr <- result.try(validation.validate_address(addr))
-      parse_storage_at_args_helper(rest, validated_addr, slot, block, remaining)
-    }
-
-    ["--slot", slot_val, ..rest] -> {
-      parse_storage_at_args_helper(rest, address, slot_val, block, remaining)
-    }
-
-    ["--block", block_val, ..rest] -> {
-      parse_storage_at_args_helper(rest, address, slot, block_val, remaining)
-    }
-
-    // Any other arguments (like --rpc-url) go to remaining
-    _ -> Ok(#(address, slot, block, args))
-  }
-}
-
-// Parse get-logs command arguments
-fn parse_get_logs_args(
-  args: List(String),
-) -> Result(
-  #(String, String, String, List(String), List(String)),
-  rpc_types.GleethError,
-) {
-  parse_get_logs_args_helper(args, "", "", "", [], [])
-}
-
-// Helper function to parse get-logs arguments recursively
-fn parse_get_logs_args_helper(
-  args: List(String),
-  from_block: String,
-  to_block: String,
-  address: String,
-  topics: List(String),
-  remaining: List(String),
-) -> Result(
-  #(String, String, String, List(String), List(String)),
-  rpc_types.GleethError,
-) {
-  case args {
-    [] -> Ok(#(from_block, to_block, address, topics, remaining))
-
-    ["--from-block", block, ..rest] -> {
-      parse_get_logs_args_helper(
-        rest,
-        block,
-        to_block,
-        address,
-        topics,
-        remaining,
-      )
-    }
-
-    ["--to-block", block, ..rest] -> {
-      parse_get_logs_args_helper(
-        rest,
-        from_block,
-        block,
-        address,
-        topics,
-        remaining,
-      )
-    }
-
-    ["--address", addr, ..rest] -> {
-      use validated_addr <- result.try(validation.validate_address(addr))
-      parse_get_logs_args_helper(
-        rest,
-        from_block,
-        to_block,
-        validated_addr,
-        topics,
-        remaining,
-      )
-    }
-
-    ["--topic", topic, ..rest] -> {
-      // Add topic to the list
-      let new_topics = [topic, ..topics]
-      parse_get_logs_args_helper(
-        rest,
-        from_block,
-        to_block,
-        address,
-        new_topics,
-        remaining,
-      )
-    }
-
-    // Any other arguments (like --rpc-url) go to remaining
-    _ -> Ok(#(from_block, to_block, address, topics, args))
-  }
-}
-
-// Parse send command arguments
-fn parse_send_args(
-  args: List(String),
-) -> Result(
-  #(String, String, String, String, String, Bool, List(String)),
-  rpc_types.GleethError,
-) {
-  parse_send_args_helper(args, "", "", "", "", "0x", False, [])
-}
-
-fn parse_send_args_helper(
-  args: List(String),
-  to: String,
-  value: String,
-  private_key: String,
-  gas_limit: String,
-  data: String,
-  legacy: Bool,
-  remaining: List(String),
-) -> Result(
-  #(String, String, String, String, String, Bool, List(String)),
-  rpc_types.GleethError,
-) {
-  case args {
-    [] -> {
-      case to == "" || private_key == "" {
-        True ->
-          Error(rpc_types.ConfigError(
-            "send requires --to and --private-key flags",
-          ))
-        False ->
-          Ok(#(to, value, private_key, gas_limit, data, legacy, remaining))
-      }
-    }
-    ["--to", addr, ..rest] -> {
-      use validated_addr <- result.try(validation.validate_address(addr))
-      parse_send_args_helper(
-        rest,
-        validated_addr,
-        value,
-        private_key,
-        gas_limit,
-        data,
-        legacy,
-        remaining,
-      )
-    }
-    ["--value", val, ..rest] -> {
-      use parsed_val <- result.try(
-        value.parse_value(val)
-        |> result.map_error(rpc_types.ConfigError),
-      )
-      parse_send_args_helper(
-        rest,
-        to,
-        parsed_val,
-        private_key,
-        gas_limit,
-        data,
-        legacy,
-        remaining,
-      )
-    }
-    ["--private-key", key, ..rest] ->
-      parse_send_args_helper(
-        rest,
-        to,
-        value,
-        key,
-        gas_limit,
-        data,
-        legacy,
-        remaining,
-      )
-    ["--gas-limit", gl, ..rest] -> {
-      use parsed_gl <- result.try(
-        value.parse_value(gl)
-        |> result.map_error(rpc_types.ConfigError),
-      )
-      parse_send_args_helper(
-        rest,
-        to,
-        value,
-        private_key,
-        parsed_gl,
-        data,
-        legacy,
-        remaining,
-      )
-    }
-    ["--data", d, ..rest] ->
-      parse_send_args_helper(
-        rest,
-        to,
-        value,
-        private_key,
-        gas_limit,
-        d,
-        legacy,
-        remaining,
-      )
-    ["--legacy", ..rest] ->
-      parse_send_args_helper(
-        rest,
-        to,
-        value,
-        private_key,
-        gas_limit,
-        data,
-        True,
-        remaining,
-      )
-    _ -> Ok(#(to, value, private_key, gas_limit, data, legacy, args))
-  }
-}
-
-// Parse fee-history command arguments
-fn parse_fee_history_args(
-  args: List(String),
-) -> Result(#(Int, String, List(Float), List(String)), rpc_types.GleethError) {
-  parse_fee_history_helper(args, 0, "latest", [])
-}
-
-fn parse_fee_history_helper(
-  args: List(String),
-  block_count: Int,
-  newest_block: String,
-  percentiles: List(Float),
-) -> Result(#(Int, String, List(Float), List(String)), rpc_types.GleethError) {
-  case args {
-    [] -> {
-      case block_count {
-        0 ->
-          Error(rpc_types.ConfigError("fee-history requires --block-count flag"))
-        _ -> Ok(#(block_count, newest_block, percentiles, []))
-      }
-    }
-    ["--block-count", count_str, ..rest] -> {
-      case int.parse(count_str) {
-        Ok(count) ->
-          parse_fee_history_helper(rest, count, newest_block, percentiles)
-        Error(_) ->
-          Error(rpc_types.ConfigError("Invalid block count: " <> count_str))
-      }
-    }
-    ["--newest-block", block, ..rest] ->
-      parse_fee_history_helper(rest, block_count, block, percentiles)
-    ["--percentiles", pct_str, ..rest] -> {
-      case parse_float_list(pct_str) {
-        Ok(pcts) ->
-          parse_fee_history_helper(rest, block_count, newest_block, pcts)
-        Error(_) ->
-          Error(rpc_types.ConfigError(
-            "Invalid percentiles: "
-            <> pct_str
-            <> " (expected comma-separated floats like 25.0,50.0,75.0)",
-          ))
-      }
-    }
-    _ -> {
-      case block_count {
-        0 ->
-          Error(rpc_types.ConfigError("fee-history requires --block-count flag"))
-        _ -> Ok(#(block_count, newest_block, percentiles, args))
-      }
-    }
-  }
-}
-
-fn parse_float_list(s: String) -> Result(List(Float), Nil) {
-  s
-  |> string.split(",")
-  |> list.try_map(fn(part) {
-    let trimmed = string.trim(part)
-    case float.parse(trimmed) {
-      Ok(f) -> Ok(f)
-      Error(_) -> {
-        // Try parsing as int and converting
-        case int.parse(trimmed) {
-          Ok(i) -> Ok(int.to_float(i))
-          Error(_) -> Error(Nil)
-        }
-      }
-    }
-  })
-}
-
-// Parse nonce command arguments
-fn parse_nonce_args(
-  args: List(String),
-) -> Result(#(String, List(String)), rpc_types.GleethError) {
-  case args {
-    ["--block", block, ..rest] -> Ok(#(block, rest))
-    _ -> Ok(#("pending", args))
-  }
-}
-
-// Parse wait command arguments
-fn parse_wait_args(
-  args: List(String),
-) -> Result(#(Int, List(String)), rpc_types.GleethError) {
-  case args {
-    ["--timeout", timeout_str, ..rest] -> {
-      case int.parse(timeout_str) {
-        Ok(timeout) -> Ok(#(timeout, rest))
-        Error(_) ->
-          Error(rpc_types.ConfigError("Invalid timeout: " <> timeout_str))
-      }
-    }
-    _ -> Ok(#(60_000, args))
-  }
-}
-
-// Parse convert command arguments
-fn parse_convert_args(
-  args: List(String),
-) -> Result(#(String, String), rpc_types.GleethError) {
-  case args {
-    ["--from", from_unit, "--to", to_unit] -> Ok(#(from_unit, to_unit))
-    ["--to", to_unit, "--from", from_unit] -> Ok(#(from_unit, to_unit))
-    _ ->
-      Error(rpc_types.ConfigError(
-        "convert requires --from <unit> --to <unit> (units: wei, gwei, ether)",
-      ))
-  }
-}
-
-// Parse decode-calldata arguments
-fn parse_decode_calldata_args(
-  args: List(String),
-) -> #(Option(String), Option(String), Option(String)) {
-  parse_decode_calldata_helper(args, None, None, None)
-}
-
-fn parse_decode_calldata_helper(
-  args: List(String),
-  signature: Option(String),
-  abi_file: Option(String),
-  function_name: Option(String),
-) -> #(Option(String), Option(String), Option(String)) {
-  case args {
-    ["--signature", sig, ..rest] ->
-      parse_decode_calldata_helper(rest, Some(sig), abi_file, function_name)
-    ["--abi", file, ..rest] ->
-      parse_decode_calldata_helper(rest, signature, Some(file), function_name)
-    ["--function", name, ..rest] ->
-      parse_decode_calldata_helper(rest, signature, abi_file, Some(name))
-    _ -> #(signature, abi_file, function_name)
-  }
-}
-
-// Parse decode-revert arguments
-fn parse_decode_revert_args(args: List(String)) -> Option(String) {
-  case args {
-    ["--abi", file, ..] -> Some(file)
-    _ -> None
-  }
-}
-
-// Parse selector arguments
-fn parse_selector_args(args: List(String)) -> Bool {
-  case args {
-    ["--event", ..] -> True
-    _ -> False
-  }
-}
-
-fn parse_abi_lookup_args(args: List(String)) -> #(String, Option(String)) {
-  parse_abi_lookup_helper(args, "mainnet", None)
-}
-
-fn parse_abi_lookup_helper(
-  args: List(String),
-  chain: String,
-  output: Option(String),
-) -> #(String, Option(String)) {
-  case args {
-    ["--chain", name, ..rest] -> parse_abi_lookup_helper(rest, name, output)
-    ["--output", file, ..rest] ->
-      parse_abi_lookup_helper(rest, chain, Some(file))
-    ["-o", file, ..rest] -> parse_abi_lookup_helper(rest, chain, Some(file))
-    _ -> #(chain, output)
-  }
-}
-
-/// Per-command help text
-fn command_help(command: String) -> Result(String, Nil) {
-  case command {
-    "block-number" ->
-      Ok(
-        "Get the latest block number
-
-Usage: gleeth block-number [options]
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-  --json                Output as JSON",
-      )
-    "block" ->
-      Ok(
-        "Get block details by number, hash, or tag
-
-Usage: gleeth block <number|hash|latest> [options]
-
-Arguments:
-  <number|hash|latest>  Block number (decimal or hex), block hash, or 'latest'
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-  --json                Output as JSON
-
-Examples:
-  gleeth block latest --chain mainnet
-  gleeth block 21000000 --chain mainnet
-  gleeth block 0x75da96... --chain mainnet --json",
-      )
-    "balance" ->
-      Ok(
-        "Get ETH balance for one or more addresses
-
-Usage: gleeth balance <address> [address2 ...] [options]
-       gleeth balance --file <file> [options]
-
-Arguments:
-  <address>             Ethereum address (one or more, queried in parallel)
-  --file, -f <file>     File with one address per line (# comments supported)
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-  --json                Output as JSON (single address only)
-
-Examples:
-  gleeth balance 0xd8dA6BF2... --chain mainnet
-  gleeth balance 0xaddr1 0xaddr2 0xaddr3 --chain mainnet
-  gleeth balance --file addresses.txt --chain mainnet",
-      )
-    "call" ->
-      Ok(
-        "Call a contract function (read-only)
-
-Usage: gleeth call <contract> <function> [params...] [options]
-
-Arguments:
-  <contract>            Contract address
-  <function>            Function name (e.g. balanceOf, totalSupply)
-  [params...]           Parameters as type:value (e.g. address:0x...)
-
-Options:
-  --abi <file>          JSON ABI file for typed encoding/decoding
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-
-Examples:
-  gleeth call 0xA0b8... totalSupply --chain mainnet
-  gleeth call 0xA0b8... balanceOf address:0xd8dA... --chain mainnet
-  gleeth call 0xA0b8... name --abi erc20.json --chain mainnet",
-      )
-    "transaction" ->
-      Ok(
-        "Get transaction details by hash
-
-Usage: gleeth transaction <hash> [options]
-
-Arguments:
-  <hash>                Transaction hash (0x-prefixed, 66 chars)
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name",
-      )
-    "code" ->
-      Ok(
-        "Get contract bytecode at an address
-
-Usage: gleeth code <address> [options]
-
-Arguments:
-  <address>             Contract address
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name",
-      )
-    "estimate-gas" ->
-      Ok(
-        "Estimate gas for a transaction
-
-Usage: gleeth estimate-gas [options]
-
-Options:
-  --from <address>      Sender address
-  --to <address>        Recipient address
-  --value <amount>      Value (e.g. 1ether, 10gwei, 0xde0b...)
-  --data <hex>          Transaction data
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name",
-      )
-    "storage-at" ->
-      Ok(
-        "Read a contract's storage slot
-
-Usage: gleeth storage-at --address <addr> --slot <hex> [options]
-
-Options:
-  --address <address>   Contract address (required)
-  --slot <hex>          Storage slot position (required)
-  --block <tag>         Block number, hash, or 'latest' (default: latest)
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name",
-      )
-    "get-logs" ->
-      Ok(
-        "Query event logs with filtering
-
-Usage: gleeth get-logs [options]
-
-Options:
-  --from-block <b>      Starting block (default: latest)
-  --to-block <b>        Ending block (default: latest)
-  --address <addr>      Contract address to filter
-  --topic <hex>         Topic filter (repeatable for multiple topics)
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name",
-      )
-    "send" ->
-      Ok(
-        "Sign and broadcast a transaction
-
-Usage: gleeth send [options]
-
-Options:
-  --to <address>        Recipient address (required)
-  --value <amount>      Amount to send (e.g. 1ether, 10gwei, 0xde0b...)
-  --private-key <hex>   Sender's private key (required)
-  --gas-limit <amount>  Gas limit (default: 21000)
-  --data <hex>          Transaction calldata
-  --legacy              Use legacy (Type 0) instead of EIP-1559
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-
-Examples:
-  gleeth send --to 0x7099... --value 1ether --private-key 0xac09... --chain mainnet
-  gleeth send --to 0x7099... --value 10gwei --private-key 0x... --legacy",
-      )
-    "chain-id" ->
-      Ok(
-        "Get the chain ID of the connected network
-
-Usage: gleeth chain-id [options]
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-  --json                Output as JSON",
-      )
-    "gas-price" ->
-      Ok(
-        "Get current gas price and max priority fee
-
-Usage: gleeth gas-price [options]
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-  --json                Output as JSON",
-      )
-    "fee-history" ->
-      Ok(
-        "Get fee history for recent blocks
-
-Usage: gleeth fee-history --block-count <n> [options]
-
-Options:
-  --block-count <n>     Number of blocks to query (required)
-  --newest-block <b>    Start block (default: latest)
-  --percentiles <list>  Reward percentiles, comma-separated (e.g. 25,50,75)
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-
-Examples:
-  gleeth fee-history --block-count 10 --percentiles 25,50,75 --chain mainnet",
-      )
-    "nonce" ->
-      Ok(
-        "Get transaction count (nonce) for an address
-
-Usage: gleeth nonce <address> [options]
-
-Arguments:
-  <address>             Ethereum address
-
-Options:
-  --block <tag>         pending or latest (default: pending)
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name
-  --json                Output as JSON",
-      )
-    "receipt" ->
-      Ok(
-        "Get a transaction receipt
-
-Usage: gleeth receipt <hash> [options]
-
-Arguments:
-  <hash>                Transaction hash
-
-Options:
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name",
-      )
-    "wait" ->
-      Ok(
-        "Wait for a transaction to be mined (polls with exponential backoff)
-
-Usage: gleeth wait <hash> [options]
-
-Arguments:
-  <hash>                Transaction hash
-
-Options:
-  --timeout <ms>        Timeout in milliseconds (default: 60000)
-  --rpc-url <url>       RPC endpoint
-  --chain <name>        Chain name",
-      )
-    "wallet" ->
-      Ok(
-        "Manage Ethereum wallets
-
-Usage: gleeth wallet <command> [options]
-
-Commands:
-  generate                              Generate new random wallet
-  create --private-key <key>            Create wallet from private key
-  info --private-key <key>              Show wallet information
-  sign --private-key <key> --message <msg>     Sign a personal message
-  verify --public-key <key> --message <msg> --signature <sig>  Verify
-
-Short flags: -k (private-key), -p (public-key), -m (message), -s (signature)
-
-Examples:
-  gleeth wallet generate
-  gleeth wallet sign -k 0x... -m 'Hello World'",
-      )
-    "recover" ->
-      Ok(
-        "Recover signer from an Ethereum signature
-
-Usage: gleeth recover [options] <message> <signature>
-
-Arguments:
-  <message>             Message that was signed (or 0x-prefixed hash)
-  <signature>           Signature in hex (65 bytes, r+s+v format)
-
-Options:
-  --mode <mode>         pubkey, address, candidates, or verify:<addr>
-  --format <fmt>        compact, detailed, or json
-
-Examples:
-  gleeth recover --mode address 'Hello' 0x...
-  gleeth recover --mode verify:0xf39fd... 'Hello' 0x...
-  gleeth recover --mode pubkey --format json 'Hello' 0x...",
-      )
-    "checksum" ->
-      Ok(
-        "Compute EIP-55 checksummed address
-
-Usage: gleeth checksum <address>
-
-Arguments:
-  <address>             Ethereum address (any case)",
-      )
-    "convert" ->
-      Ok(
-        "Convert between Ethereum units (wei, gwei, ether)
-
-Usage: gleeth convert <value> --from <unit> --to <unit>
-
-Arguments:
-  <value>               Numeric value to convert
-
-Options:
-  --from <unit>         Source unit: wei, gwei, ether
-  --to <unit>           Target unit: wei, gwei, ether
-
-Examples:
-  gleeth convert 1 --from ether --to wei
-  gleeth convert 1000000000 --from gwei --to ether
-  gleeth convert 0.5 --from ether --to gwei",
-      )
-    "decode-tx" ->
-      Ok(
-        "Decode a signed raw transaction
-
-Usage: gleeth decode-tx <raw-hex>
-
-Arguments:
-  <raw-hex>             RLP-encoded signed transaction (0x-prefixed)
-                        Auto-detects legacy (Type 0) and EIP-1559 (Type 2)",
-      )
-    "decode-calldata" ->
-      Ok(
-        "Decode contract calldata into function name and arguments
-
-Usage: gleeth decode-calldata <hex> [options]
-
-Arguments:
-  <hex>                 Calldata hex string (0x-prefixed)
-
-Options (one required):
-  --signature <sig>     Function signature (e.g. transfer(address,uint256))
-  --abi <file>          JSON ABI file
-  --function <name>     Function name (used with --abi)
-
-Examples:
-  gleeth decode-calldata 0xa9059cbb... --signature 'transfer(address,uint256)'
-  gleeth decode-calldata 0xa9059cbb... --abi erc20.json",
-      )
-    "decode-revert" ->
-      Ok(
-        "Decode revert reason from failed transaction data
-
-Usage: gleeth decode-revert <hex> [options]
-
-Arguments:
-  <hex>                 Revert data hex string (0x-prefixed)
-
-Options:
-  --abi <file>          JSON ABI file (for custom error types)
-
-Handles Error(string), Panic(uint256), and custom errors.",
-      )
-    "selector" ->
-      Ok(
-        "Compute function selector or event topic from a signature
-
-Usage: gleeth selector <signature> [options]
-
-Arguments:
-  <signature>           Function or event signature (e.g. transfer(address,uint256))
-
-Options:
-  --event               Compute full 32-byte event topic instead of 4-byte selector
-
-Examples:
-  gleeth selector 'transfer(address,uint256)'
-  gleeth selector 'Transfer(address,address,uint256)' --event",
-      )
-    "keccak" ->
-      Ok(
-        "Compute keccak256 hash
-
-Usage: gleeth keccak <input>
-       gleeth keccak --hex <hex-data>
-
-Arguments:
-  <input>               String to hash
-  --hex <hex-data>      Hex-encoded bytes to hash
-
-Examples:
-  gleeth keccak 'transfer(address,uint256)'
-  gleeth keccak --hex 0xdeadbeef",
-      )
-    "encode-calldata" ->
-      Ok(
-        "Encode function calldata from signature and parameters
-
-Usage: gleeth encode-calldata <signature> [type:value ...]
-
-Arguments:
-  <signature>           Function signature (e.g. transfer(address,uint256))
-  [type:value ...]      Parameters as type:value pairs
-
-Examples:
-  gleeth encode-calldata 'transfer(address,uint256)' address:0xd8dA... uint256:1000000
-  gleeth encode-calldata 'approve(address,uint256)' address:0x... uint256:0xffffffff",
-      )
-    "4byte" ->
-      Ok(
-        "Look up function signatures by 4-byte selector (via Sourcify)
-
-Usage: gleeth 4byte <selector>
-
-Arguments:
-  <selector>            4-byte function selector (0x-prefixed)
-
-Examples:
-  gleeth 4byte 0xa9059cbb",
-      )
-    "abi" ->
-      Ok(
-        "Look up a verified contract's ABI from Sourcify
-
-Usage: gleeth abi <address> [options]
-
-Arguments:
-  <address>             Contract address
-
-Options:
-  --chain <name>        Chain name (default: mainnet)
-  --output, -o <file>   Save ABI to file instead of printing
-
-Examples:
-  gleeth abi 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 --chain mainnet
-  gleeth abi 0xA0b8... --chain mainnet --output usdc.json",
-      )
-    "sign-typed-data" ->
-      Ok(
-        "Sign, verify, or hash EIP-712 typed structured data
-
-Usage: gleeth sign-typed-data <file> --private-key <key>   Sign
-       gleeth sign-typed-data --verify <file> --signature <sig>  Verify
-       gleeth sign-typed-data --hash <file>                Hash
-
-Arguments:
-  <file>                JSON file with EIP-712 typed data
-
-Options:
-  --private-key, -k     Private key for signing
-  --verify              Verify mode: recover signer from signature
-  --signature           Signature to verify (hex)
-  --hash                Hash mode: output the EIP-712 digest
-
-The JSON file follows the standard EIP-712 format:
-  {\"types\": {...}, \"primaryType\": \"...\", \"domain\": {...}, \"message\": {...}}
-
-Examples:
-  gleeth sign-typed-data permit.json -k 0xac09...
-  gleeth sign-typed-data --verify permit.json --signature 0x4a0f...
-  gleeth sign-typed-data --hash permit.json",
-      )
-    _ -> Error(Nil)
   }
 }
 
@@ -1519,3 +286,939 @@ pub fn show_help() -> Nil {
   io.println("  gleeth convert 1 --from ether --to wei")
   io.println("  gleeth sign-typed-data data.json -k 0xac09...")
 }
+
+// ---------------------------------------------------------------------------
+// Shared option builders
+// ---------------------------------------------------------------------------
+
+/// Optional --rpc-url
+fn rpc_url_opt() -> opt.Opt(Result(String, Nil)) {
+  opt.new("rpc-url")
+  |> opt.help("RPC endpoint URL")
+  |> opt.optional
+}
+
+/// Optional --chain
+fn chain_opt() -> opt.Opt(Result(String, Nil)) {
+  opt.new("chain")
+  |> opt.help("Chain name (resolves via GLEETH_RPC_<CHAIN> env var)")
+  |> opt.optional
+}
+
+/// --json flag
+fn json_flag() -> flag.Flag {
+  flag.new("json")
+  |> flag.help("Output as JSON")
+}
+
+/// Build Args for an RPC command.
+fn make_rpc_args(
+  rpc_url: Result(String, Nil),
+  chain: Result(String, Nil),
+  json: Bool,
+  command: Command,
+) -> Result(Args, String) {
+  use url <- result.try(resolve_rpc(rpc_url, chain))
+  Ok(Args(command, url, json))
+}
+
+/// Build Args for an offline command (no RPC needed).
+fn offline_args(command: Command) -> Result(Args, String) {
+  Ok(Args(command, "", False))
+}
+
+/// Convert Result(a, Nil) to Option(a).
+fn to_option(r: Result(a, Nil)) -> Option(a) {
+  option.from_result(r)
+}
+
+// ---------------------------------------------------------------------------
+// Top-level command
+// ---------------------------------------------------------------------------
+
+fn cli_command() -> clip.Command(Result(Args, String)) {
+  clip.subcommands_with_default(
+    [
+      #("block-number", block_number_cmd()),
+      #("block", block_cmd()),
+      #("balance", balance_cmd()),
+      #("call", call_cmd()),
+      #("transaction", transaction_cmd()),
+      #("code", code_cmd()),
+      #("estimate-gas", estimate_gas_cmd()),
+      #("storage-at", storage_at_cmd()),
+      #("get-logs", get_logs_cmd()),
+      #("send", send_cmd()),
+      #("chain-id", chain_id_cmd()),
+      #("gas-price", gas_price_cmd()),
+      #("fee-history", fee_history_cmd()),
+      #("nonce", nonce_cmd()),
+      #("receipt", receipt_cmd()),
+      #("wait", wait_cmd()),
+      #("checksum", checksum_cmd()),
+      #("convert", convert_cmd()),
+      #("decode-tx", decode_tx_cmd()),
+      #("decode-calldata", decode_calldata_cmd()),
+      #("decode-revert", decode_revert_cmd()),
+      #("selector", selector_cmd()),
+      #("keccak", keccak_cmd()),
+      #("encode-calldata", encode_calldata_cmd()),
+      #("4byte", four_byte_cmd()),
+      #("abi", abi_cmd()),
+      #("sign-typed-data", sign_typed_data_cmd()),
+    ],
+    clip.fail("Invalid command. Use --help for usage information."),
+  )
+}
+
+// ---------------------------------------------------------------------------
+// RPC subcommands
+// ---------------------------------------------------------------------------
+
+fn block_number_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    make_rpc_args(rpc_url, chain, json, BlockNumber)
+  })
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple("block-number", "Get the latest block number"))
+}
+
+fn block_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use block_id <- clip.parameter
+    make_rpc_args(rpc_url, chain, json, Block(block_id))
+  })
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg(
+    arg.new("block-id")
+    |> arg.help("Block number, hash, or 'latest'"),
+  )
+  |> clip.help(help.simple("block", "Get block details by number, hash, or tag"))
+}
+
+fn balance_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use file <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use addresses <- clip.parameter
+    use validated <- result.try(validate_balance_args(addresses, file))
+    let #(addrs, f) = validated
+    make_rpc_args(rpc_url, chain, json, Balance(addrs, f))
+  })
+  |> clip.opt(
+    opt.new("file")
+    |> opt.short("f")
+    |> opt.help("File with one address per line")
+    |> opt.optional,
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg_many(
+    arg.new("address")
+    |> arg.help("Ethereum address(es)"),
+  )
+  |> clip.help(help.simple(
+    "balance",
+    "Get ETH balance for one or more addresses",
+  ))
+}
+
+fn call_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use abi_file <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use contract <- clip.parameter
+    use function <- clip.parameter
+    use parameters <- clip.parameter
+    use validated_contract <- result.try(validate_address_str(contract))
+    make_rpc_args(
+      rpc_url,
+      chain,
+      json,
+      Call(validated_contract, function, parameters, to_option(abi_file)),
+    )
+  })
+  |> clip.opt(
+    opt.new("abi")
+    |> opt.help("JSON ABI file for typed encoding/decoding")
+    |> opt.optional,
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg(
+    arg.new("contract")
+    |> arg.help("Contract address"),
+  )
+  |> clip.arg(
+    arg.new("function")
+    |> arg.help("Function name"),
+  )
+  |> clip.arg_many(
+    arg.new("params")
+    |> arg.help("Parameters as type:value"),
+  )
+  |> clip.help(help.simple("call", "Call a contract function (read-only)"))
+}
+
+fn transaction_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use hash <- clip.parameter
+    use validated_hash <- result.try(validate_hash_str(hash))
+    make_rpc_args(rpc_url, chain, json, Transaction(validated_hash))
+  })
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg(
+    arg.new("hash")
+    |> arg.help("Transaction hash"),
+  )
+  |> clip.help(help.simple("transaction", "Get transaction details by hash"))
+}
+
+fn code_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use address <- clip.parameter
+    use validated_address <- result.try(validate_address_str(address))
+    make_rpc_args(rpc_url, chain, json, Code(validated_address))
+  })
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg(
+    arg.new("address")
+    |> arg.help("Contract address"),
+  )
+  |> clip.help(help.simple("code", "Get contract bytecode at an address"))
+}
+
+fn estimate_gas_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use from <- clip.parameter
+    use to <- clip.parameter
+    use value_str <- clip.parameter
+    use data <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    let from_addr = case from {
+      Ok(a) -> validate_address_str(a)
+      Error(Nil) -> Ok("")
+    }
+    let to_addr = case to {
+      Ok(a) -> validate_address_str(a)
+      Error(Nil) -> Ok("")
+    }
+    let parsed_value = case value_str {
+      Ok(v) -> value.parse_value(v)
+      Error(Nil) -> Ok("")
+    }
+    use f <- result.try(from_addr)
+    use t <- result.try(to_addr)
+    use val <- result.try(parsed_value)
+    let d = result.unwrap(data, "")
+    make_rpc_args(rpc_url, chain, json, EstimateGas(f, t, val, d))
+  })
+  |> clip.opt(
+    opt.new("from")
+    |> opt.help("Sender address")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("to")
+    |> opt.help("Recipient address")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("value")
+    |> opt.help("Value (e.g. 1ether, 10gwei, 0xde0b...)")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("data")
+    |> opt.help("Transaction data")
+    |> opt.optional,
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple("estimate-gas", "Estimate gas for a transaction"))
+}
+
+fn storage_at_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use address <- clip.parameter
+    use slot <- clip.parameter
+    use block <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use validated_address <- result.try(validate_address_str(address))
+    let block_tag = result.unwrap(block, "")
+    make_rpc_args(
+      rpc_url,
+      chain,
+      json,
+      StorageAt(validated_address, slot, block_tag),
+    )
+  })
+  |> clip.opt(
+    opt.new("address")
+    |> opt.help("Contract address (required)"),
+  )
+  |> clip.opt(
+    opt.new("slot")
+    |> opt.help("Storage slot position (required)"),
+  )
+  |> clip.opt(
+    opt.new("block")
+    |> opt.help("Block number, hash, or 'latest'")
+    |> opt.optional,
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple("storage-at", "Read a contract's storage slot"))
+}
+
+fn get_logs_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use from_block <- clip.parameter
+    use to_block <- clip.parameter
+    use address <- clip.parameter
+    use topics_str <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    let fb = result.unwrap(from_block, "")
+    let tb = result.unwrap(to_block, "")
+    let addr = case address {
+      Ok(a) -> validate_address_str(a)
+      Error(Nil) -> Ok("")
+    }
+    let topics = case topics_str {
+      Ok(s) -> parse_topic_list(s)
+      Error(Nil) -> []
+    }
+    use validated_addr <- result.try(addr)
+    make_rpc_args(rpc_url, chain, json, GetLogs(fb, tb, validated_addr, topics))
+  })
+  |> clip.opt(
+    opt.new("from-block")
+    |> opt.help("Starting block")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("to-block")
+    |> opt.help("Ending block")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("address")
+    |> opt.help("Contract address to filter")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("topic")
+    |> opt.help("Topic filter (comma-separated for multiple)")
+    |> opt.optional,
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple("get-logs", "Query event logs with filtering"))
+}
+
+fn send_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use to <- clip.parameter
+    use value_str <- clip.parameter
+    use private_key <- clip.parameter
+    use gas_limit_str <- clip.parameter
+    use data <- clip.parameter
+    use legacy <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    let to_addr = case to {
+      Ok(a) -> validate_address_str(a)
+      Error(Nil) -> Ok("")
+    }
+    let parsed_value = case value_str {
+      Ok(v) -> value.parse_value(v)
+      Error(Nil) -> Ok("")
+    }
+    let parsed_gas = case gas_limit_str {
+      Ok(g) -> value.parse_value(g)
+      Error(Nil) -> Ok("")
+    }
+    use t <- result.try(to_addr)
+    use val <- result.try(parsed_value)
+    let key = result.unwrap(private_key, "")
+    use gl <- result.try(parsed_gas)
+    let d = result.unwrap(data, "0x")
+    make_rpc_args(rpc_url, chain, json, Send(t, val, key, gl, d, legacy))
+  })
+  |> clip.opt(
+    opt.new("to")
+    |> opt.help("Recipient address")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("value")
+    |> opt.help("Amount to send (e.g. 1ether, 10gwei)")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("private-key")
+    |> opt.help("Sender's private key")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("gas-limit")
+    |> opt.help("Gas limit")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("data")
+    |> opt.help("Transaction calldata")
+    |> opt.optional,
+  )
+  |> clip.flag(
+    flag.new("legacy")
+    |> flag.help("Use legacy (Type 0) instead of EIP-1559"),
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple("send", "Sign and broadcast a transaction"))
+}
+
+fn chain_id_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    make_rpc_args(rpc_url, chain, json, ChainId)
+  })
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple(
+    "chain-id",
+    "Get the chain ID of the connected network",
+  ))
+}
+
+fn gas_price_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    make_rpc_args(rpc_url, chain, json, GasPrice)
+  })
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple(
+    "gas-price",
+    "Get current gas price and max priority fee",
+  ))
+}
+
+fn fee_history_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use block_count <- clip.parameter
+    use newest_block <- clip.parameter
+    use percentiles_str <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    let percentiles = case percentiles_str {
+      Ok(s) -> {
+        case parse_float_list(s) {
+          Ok(pcts) -> Ok(pcts)
+          Error(_) ->
+            Error(
+              "Invalid percentiles: "
+              <> s
+              <> " (expected comma-separated floats like 25.0,50.0,75.0)",
+            )
+        }
+      }
+      Error(Nil) -> Ok([])
+    }
+    use pcts <- result.try(percentiles)
+    let nb = result.unwrap(newest_block, "latest")
+    make_rpc_args(rpc_url, chain, json, FeeHistory(block_count, nb, pcts))
+  })
+  |> clip.opt(
+    opt.new("block-count")
+    |> opt.help("Number of blocks to query (required)")
+    |> opt.int,
+  )
+  |> clip.opt(
+    opt.new("newest-block")
+    |> opt.help("Start block (default: latest)")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("percentiles")
+    |> opt.help("Reward percentiles, comma-separated (e.g. 25,50,75)")
+    |> opt.optional,
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.help(help.simple("fee-history", "Get fee history for recent blocks"))
+}
+
+fn nonce_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use block <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use address <- clip.parameter
+    use validated_address <- result.try(validate_address_str(address))
+    let block_tag = result.unwrap(block, "pending")
+    make_rpc_args(rpc_url, chain, json, Nonce(validated_address, block_tag))
+  })
+  |> clip.opt(
+    opt.new("block")
+    |> opt.help("pending or latest (default: pending)")
+    |> opt.optional,
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg(
+    arg.new("address")
+    |> arg.help("Ethereum address"),
+  )
+  |> clip.help(help.simple(
+    "nonce",
+    "Get transaction count (nonce) for an address",
+  ))
+}
+
+fn receipt_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use hash <- clip.parameter
+    use validated_hash <- result.try(validate_hash_str(hash))
+    make_rpc_args(rpc_url, chain, json, Receipt(validated_hash))
+  })
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg(
+    arg.new("hash")
+    |> arg.help("Transaction hash"),
+  )
+  |> clip.help(help.simple("receipt", "Get a transaction receipt"))
+}
+
+fn wait_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use timeout <- clip.parameter
+    use rpc_url <- clip.parameter
+    use chain <- clip.parameter
+    use json <- clip.parameter
+    use hash <- clip.parameter
+    use validated_hash <- result.try(validate_hash_str(hash))
+    make_rpc_args(rpc_url, chain, json, Wait(validated_hash, timeout))
+  })
+  |> clip.opt(
+    opt.new("timeout")
+    |> opt.help("Timeout in milliseconds (default: 60000)")
+    |> opt.int
+    |> opt.default(60_000),
+  )
+  |> clip.opt(rpc_url_opt())
+  |> clip.opt(chain_opt())
+  |> clip.flag(json_flag())
+  |> clip.arg(
+    arg.new("hash")
+    |> arg.help("Transaction hash"),
+  )
+  |> clip.help(help.simple("wait", "Wait for a transaction to be mined"))
+}
+
+// ---------------------------------------------------------------------------
+// Offline subcommands
+// ---------------------------------------------------------------------------
+
+fn checksum_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use address <- clip.parameter
+    offline_args(Checksum(address))
+  })
+  |> clip.arg(
+    arg.new("address")
+    |> arg.help("Ethereum address (any case)"),
+  )
+  |> clip.help(help.simple("checksum", "Compute EIP-55 checksummed address"))
+}
+
+fn convert_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use from_unit <- clip.parameter
+    use to_unit <- clip.parameter
+    use val <- clip.parameter
+    offline_args(Convert(val, from_unit, to_unit))
+  })
+  |> clip.opt(
+    opt.new("from")
+    |> opt.help("Source unit: wei, gwei, ether"),
+  )
+  |> clip.opt(
+    opt.new("to")
+    |> opt.help("Target unit: wei, gwei, ether"),
+  )
+  |> clip.arg(
+    arg.new("value")
+    |> arg.help("Numeric value to convert"),
+  )
+  |> clip.help(help.simple("convert", "Convert between Ethereum units"))
+}
+
+fn decode_tx_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use raw_hex <- clip.parameter
+    offline_args(DecodeTx(raw_hex))
+  })
+  |> clip.arg(
+    arg.new("raw-hex")
+    |> arg.help("RLP-encoded signed transaction (0x-prefixed)"),
+  )
+  |> clip.help(help.simple("decode-tx", "Decode a signed raw transaction"))
+}
+
+fn decode_calldata_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use signature <- clip.parameter
+    use abi_file <- clip.parameter
+    use function_name <- clip.parameter
+    use calldata <- clip.parameter
+    offline_args(DecodeCalldata(
+      calldata,
+      to_option(signature),
+      to_option(abi_file),
+      to_option(function_name),
+    ))
+  })
+  |> clip.opt(
+    opt.new("signature")
+    |> opt.help("Function signature (e.g. transfer(address,uint256))")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("abi")
+    |> opt.help("JSON ABI file")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("function")
+    |> opt.help("Function name (used with --abi)")
+    |> opt.optional,
+  )
+  |> clip.arg(
+    arg.new("calldata")
+    |> arg.help("Calldata hex string (0x-prefixed)"),
+  )
+  |> clip.help(help.simple(
+    "decode-calldata",
+    "Decode contract calldata into function name and arguments",
+  ))
+}
+
+fn decode_revert_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use abi_file <- clip.parameter
+    use data <- clip.parameter
+    offline_args(DecodeRevert(data, to_option(abi_file)))
+  })
+  |> clip.opt(
+    opt.new("abi")
+    |> opt.help("JSON ABI file (for custom error types)")
+    |> opt.optional,
+  )
+  |> clip.arg(
+    arg.new("data")
+    |> arg.help("Revert data hex string (0x-prefixed)"),
+  )
+  |> clip.help(help.simple(
+    "decode-revert",
+    "Decode revert reason from failed transaction",
+  ))
+}
+
+fn selector_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use is_event <- clip.parameter
+    use signature <- clip.parameter
+    offline_args(Selector(signature, is_event))
+  })
+  |> clip.flag(
+    flag.new("event")
+    |> flag.help("Compute full 32-byte event topic"),
+  )
+  |> clip.arg(
+    arg.new("signature")
+    |> arg.help("Function or event signature"),
+  )
+  |> clip.help(help.simple(
+    "selector",
+    "Compute function selector or event topic",
+  ))
+}
+
+fn keccak_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use is_hex <- clip.parameter
+    use input <- clip.parameter
+    offline_args(Keccak(input, is_hex))
+  })
+  |> clip.flag(
+    flag.new("hex")
+    |> flag.help("Treat input as hex-encoded bytes"),
+  )
+  |> clip.arg(
+    arg.new("input")
+    |> arg.help("String or hex data to hash"),
+  )
+  |> clip.help(help.simple("keccak", "Compute keccak256 hash"))
+}
+
+fn encode_calldata_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use signature <- clip.parameter
+    use params <- clip.parameter
+    offline_args(EncodeCalldata(signature, params))
+  })
+  |> clip.arg(
+    arg.new("signature")
+    |> arg.help("Function signature"),
+  )
+  |> clip.arg_many(
+    arg.new("params")
+    |> arg.help("Parameters as type:value pairs"),
+  )
+  |> clip.help(help.simple("encode-calldata", "Encode function calldata"))
+}
+
+fn four_byte_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use selector <- clip.parameter
+    offline_args(FourByte(selector))
+  })
+  |> clip.arg(
+    arg.new("selector")
+    |> arg.help("4-byte function selector (0x-prefixed)"),
+  )
+  |> clip.help(help.simple(
+    "4byte",
+    "Look up function signatures by 4-byte selector",
+  ))
+}
+
+fn abi_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use chain <- clip.parameter
+    use output <- clip.parameter
+    use address <- clip.parameter
+    let chain_name = result.unwrap(chain, "mainnet")
+    offline_args(AbiLookup(address, chain_name, to_option(output)))
+  })
+  |> clip.opt(
+    opt.new("chain")
+    |> opt.help("Chain name (default: mainnet)")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("output")
+    |> opt.short("o")
+    |> opt.help("Save ABI to file instead of printing")
+    |> opt.optional,
+  )
+  |> clip.arg(
+    arg.new("address")
+    |> arg.help("Contract address"),
+  )
+  |> clip.help(help.simple(
+    "abi",
+    "Look up a verified contract's ABI from Sourcify",
+  ))
+}
+
+fn sign_typed_data_cmd() -> clip.Command(Result(Args, String)) {
+  clip.command({
+    use verify_file <- clip.parameter
+    use hash_file <- clip.parameter
+    use signature <- clip.parameter
+    use private_key <- clip.parameter
+    use file <- clip.parameter
+    case verify_file, hash_file {
+      Ok(vf), _ -> {
+        case signature {
+          Ok(sig) -> offline_args(VerifyTypedData(vf, sig))
+          Error(Nil) ->
+            Error("sign-typed-data --verify requires --signature <sig>")
+        }
+      }
+      _, Ok(hf) -> offline_args(HashTypedData(hf))
+      _, _ -> {
+        case file, private_key {
+          Ok(f), Ok(key) -> offline_args(SignTypedData(f, key))
+          Ok(_), Error(Nil) ->
+            Error("sign-typed-data requires --private-key <key>")
+          Error(Nil), _ ->
+            Error(
+              "sign-typed-data requires a JSON file argument, or --verify/--hash",
+            )
+        }
+      }
+    }
+  })
+  |> clip.opt(
+    opt.new("verify")
+    |> opt.help("Verify mode: JSON file to verify")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("hash")
+    |> opt.help("Hash mode: JSON file to hash")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("signature")
+    |> opt.help("Signature to verify (hex)")
+    |> opt.optional,
+  )
+  |> clip.opt(
+    opt.new("private-key")
+    |> opt.short("k")
+    |> opt.help("Private key for signing")
+    |> opt.optional,
+  )
+  |> clip.arg(
+    arg.new("file")
+    |> arg.help("JSON file with EIP-712 typed data")
+    |> arg.optional,
+  )
+  |> clip.help(help.simple(
+    "sign-typed-data",
+    "Sign, verify, or hash EIP-712 typed structured data",
+  ))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Validate an address string, returning a String error.
+fn validate_address_str(address: String) -> Result(String, String) {
+  validation.validate_address(address)
+  |> result.map_error(rpc_types.error_to_string)
+}
+
+/// Validate a hash string, returning a String error.
+fn validate_hash_str(hash: String) -> Result(String, String) {
+  validation.validate_hash(hash)
+  |> result.map_error(rpc_types.error_to_string)
+}
+
+/// Validate balance args: must have addresses or a file.
+fn validate_balance_args(
+  addresses: List(String),
+  file: Result(String, Nil),
+) -> Result(#(List(String), Option(String)), String) {
+  case file {
+    Ok(f) -> Ok(#([], Some(f)))
+    Error(Nil) -> {
+      case addresses {
+        [] -> Error("At least one address or --file must be specified")
+        _ -> {
+          validation.validate_addresses(addresses)
+          |> result.map(fn(addrs) { #(addrs, None) })
+          |> result.map_error(rpc_types.error_to_string)
+        }
+      }
+    }
+  }
+}
+
+/// Parse comma-separated topic list.
+fn parse_topic_list(s: String) -> List(String) {
+  s
+  |> string.split(",")
+  |> list.map(string.trim)
+  |> list.filter(fn(t) { t != "" })
+}
+
+/// Parse comma-separated float list.
+fn parse_float_list(s: String) -> Result(List(Float), Nil) {
+  s
+  |> string.split(",")
+  |> list.try_map(fn(part) {
+    let trimmed = string.trim(part)
+    case float.parse(trimmed) {
+      Ok(f) -> Ok(f)
+      Error(_) -> {
+        case int.parse(trimmed) {
+          Ok(i) -> Ok(int.to_float(i))
+          Error(_) -> Error(Nil)
+        }
+      }
+    }
+  })
+}
+
+/// Resolve a chain name to an RPC URL.
+fn resolve_chain_rpc(name: String) -> Result(String, String) {
+  let env_key = "GLEETH_RPC_" <> string.uppercase(name)
+  case get_env(env_key) {
+    Ok(url) -> Ok(url)
+    Error(_) ->
+      case string.lowercase(name) {
+        "mainnet" | "ethereum" -> Ok("https://eth.llamarpc.com")
+        "sepolia" -> Ok("https://ethereum-sepolia.publicnode.com")
+        _ ->
+          Error(
+            "No RPC URL for chain '"
+            <> name
+            <> "'. Set "
+            <> env_key
+            <> " or use --rpc-url.",
+          )
+      }
+  }
+}
+
+@external(erlang, "gleeth_ffi", "get_env")
+fn get_env(name: String) -> Result(String, Nil)

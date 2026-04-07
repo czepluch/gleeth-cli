@@ -30,7 +30,7 @@ If using mise, `.mise.toml` provides erlang, gleam, and elixir.
 
 **Entry point**: `src/gleeth_cli.gleam` - `main()` parses argv, routes to commands. Offline commands (wallet, recover, checksum, convert, decode-tx, decode-calldata, decode-revert, selector, keccak, encode-calldata, 4byte, abi) are handled before Provider creation. RPC commands use `create_provider(RpcTarget)` which resolves either `--rpc-url`, `--chain` presets, or `GLEETH_RPC_URL` env var.
 
-**CLI parsing**: `src/gleeth_cli/cli.gleam` - Hand-rolled argument parser. The `Command` variant type defines all commands. `RpcTarget` is either `RpcUrl(String)` or `ChainPreset(String)`. `parse_args` strips `--json` globally, then delegates to `parse_command` which returns `Args(command, rpc_target, json)`.
+**CLI parsing**: `src/gleeth_cli/cli.gleam` - Uses the `clip` library for declarative CLI parsing. The `Command` variant type defines all commands. Each subcommand is a function returning `clip.Command(Result(Args, String))`. The `run(args)` function is the main entry point, with `parse_args` as a backward-compatible wrapper mapping errors to `GleethError`. RPC resolution (`--rpc-url`/`--chain`/`GLEETH_RPC_URL`) is handled by `resolve_rpc`. Special cases (`wallet`, `recover`, `--help`) are handled before clip parsing since they need raw arg passthrough. Named options (`clip.opt`) are parsed before positional args (`clip.arg`/`clip.arg_many`) to prevent greedy consumption.
 
 **Command modules**: `src/gleeth_cli/commands/` - One module per command. Each exposes an `execute` function. RPC commands take a `Provider`; offline commands don't. Some commands accept a `json: Bool` parameter for JSON output.
 
