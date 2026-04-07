@@ -90,6 +90,16 @@ pub fn run(args: List(String)) -> Result(Args, String) {
   // Handle special cases before clip parsing
   case args {
     [] | ["help"] | ["--help"] | ["-h"] -> Ok(Args(Help, "", False))
+    // Per-command help: gleeth <command> --help
+    [_, "--help"] | [_, "-h"] -> {
+      case clip.run(cli_command(), args) {
+        // clip returns help text as Error - return it as CommandHelp
+        Error(help_text) ->
+          Ok(Args(CommandHelp(clean_help_text(help_text)), "", False))
+        Ok(Ok(parsed)) -> Ok(parsed)
+        Ok(Error(msg)) -> Error(msg)
+      }
+    }
     ["wallet", ..wallet_args] -> Ok(Args(Wallet(wallet_args), "", False))
     ["recover", ..recover_args] -> Ok(Args(Recover(recover_args), "", False))
     _ -> {
@@ -1218,6 +1228,15 @@ fn resolve_chain_rpc(name: String) -> Result(String, String) {
           )
       }
   }
+}
+
+/// Clean up clip's auto-generated help text for display.
+/// Removes ugly default representations like "(default: Error(Nil))".
+fn clean_help_text(text: String) -> String {
+  text
+  |> string.replace(" (default: Error(Nil))", "")
+  |> string.replace(" (default: \"\")", "")
+  |> string.replace(" (default: )", "")
 }
 
 @external(erlang, "gleeth_ffi", "get_env")
