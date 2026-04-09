@@ -53,6 +53,100 @@ export GLEETH_RPC_ARBITRUM=https://arb1.arbitrum.io/rpc
 gleeth balance 0x... --chain arbitrum
 ```
 
+## Tutorial
+
+This walkthrough uses a local [Anvil](https://book.getfoundry.sh/anvil/) node. Start it in a separate terminal:
+
+```sh
+anvil
+```
+
+Anvil gives you 10 accounts with 10000 ETH each. The first account's private key is `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`.
+
+Set the RPC URL so you don't have to pass it every time:
+
+```sh
+export GLEETH_RPC_URL=http://localhost:8545
+```
+
+**Check the latest block:**
+
+```
+$ gleeth block-number
+Latest Block: 0
+Raw Hex: 0x0
+```
+
+**Check a balance:**
+
+```
+$ gleeth balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+Address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+Balance: 10000.0 ETH
+Raw Wei: 0x21e19e0c9bab2400000
+```
+
+**Send 1 ETH to another account:**
+
+```
+$ gleeth send \
+    --to 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
+    --value 1ether \
+    --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+Sending transaction...
+  From: 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
+  To: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+  Value: 0xde0b6b3a7640000
+  ...
+Transaction sent!
+  Hash: 0x...
+```
+
+**Look up the transaction receipt:**
+
+```
+$ gleeth receipt 0x<hash-from-above>
+Transaction Receipt:
+  Hash: 0x...
+  Status: Success
+  Block Number: 0x1
+  Gas Used: 0x5208
+  ...
+```
+
+**Get JSON output for scripting:**
+
+```
+$ gleeth balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --json
+{"address":"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266","balance":"0x..."}
+```
+
+**Offline tools work without a node:**
+
+```
+$ gleeth selector "transfer(address,uint256)"
+Function: transfer(address,uint256)
+Selector: 0xa9059cbb
+
+$ gleeth convert 1 --from ether --to wei
+1 ether = 1000000000000000000 wei
+
+$ gleeth 4byte 0xa9059cbb
+Selector: 0xa9059cbb
+  transfer(address,uint256)
+
+$ gleeth checksum 0xd8da6bf26964af9d7eed9e03e53415d37aa96045
+Address:
+  Input:      0xd8da6bf26964af9d7eed9e03e53415d37aa96045
+  Checksummed: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+```
+
+For per-command help, use `--help` on any command:
+
+```
+$ gleeth send --help
+```
+
 ## Global Options
 
 ```
