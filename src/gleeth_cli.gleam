@@ -1,5 +1,9 @@
 import argv
 import gleam/io
+import gleam/list
+import gleam/result
+import gleam/string
+import gleeth/ens
 import gleeth/provider
 import gleeth/rpc/types as rpc_types
 import gleeth_cli/cli
@@ -81,7 +85,11 @@ pub fn main() -> Nil {
             _ -> {
               case provider.new(parsed_args.rpc_url) {
                 Ok(p) ->
-                  execute_command(parsed_args.command, p, parsed_args.json)
+                  case resolve_ens_in_command(parsed_args.command, p) {
+                    Ok(resolved) ->
+                      execute_command(resolved, p, parsed_args.json)
+                    Error(err) -> print_error(err)
+                  }
                 Error(err) -> print_error(err)
               }
             }
@@ -186,6 +194,92 @@ fn execute_command(
     Ok(_) -> Nil
     Error(err) -> print_error(err)
   }
+}
+
+// =============================================================================
+// ENS Resolution
+// =============================================================================
+
+/// Resolve any .eth names in a command's address fields to addresses.
+fn resolve_ens_in_command(
+  command: cli.Command,
+  p: provider.Provider,
+) -> Result(cli.Command, rpc_types.GleethError) {
+  case command {
+    cli.Balance(addresses, file) -> {
+      use resolved <- result.try(resolve_addresses(addresses, p))
+      Ok(cli.Balance(resolved, file))
+    }
+    cli.Call(contract, function, parameters, abi_file) -> {
+      use resolved <- result.try(resolve_address(contract, p))
+      Ok(cli.Call(resolved, function, parameters, abi_file))
+    }
+    cli.Code(address) -> {
+      use resolved <- result.try(resolve_address(address, p))
+      Ok(cli.Code(resolved))
+    }
+    cli.Nonce(address, block) -> {
+      use resolved <- result.try(resolve_address(address, p))
+      Ok(cli.Nonce(resolved, block))
+    }
+    cli.EstimateGas(from, to, value, data) -> {
+      use resolved_from <- result.try(resolve_if_ens(from, p))
+      use resolved_to <- result.try(resolve_if_ens(to, p))
+      Ok(cli.EstimateGas(resolved_from, resolved_to, value, data))
+    }
+    cli.StorageAt(address, slot, block) -> {
+      use resolved <- result.try(resolve_address(address, p))
+      Ok(cli.StorageAt(resolved, slot, block))
+    }
+    cli.GetLogs(from_block, to_block, address, topics) -> {
+      use resolved <- result.try(resolve_if_ens(address, p))
+      Ok(cli.GetLogs(from_block, to_block, resolved, topics))
+    }
+    cli.Send(to, value, private_key, gas_limit, data, legacy) -> {
+      use resolved <- result.try(resolve_if_ens(to, p))
+      Ok(cli.Send(resolved, value, private_key, gas_limit, data, legacy))
+    }
+    // Commands without address fields pass through unchanged
+    _ -> Ok(command)
+  }
+}
+
+/// Resolve a single address or ENS name.
+fn resolve_address(
+  addr: String,
+  p: provider.Provider,
+) -> Result(String, rpc_types.GleethError) {
+  case is_ens_name(addr) {
+    True -> {
+      io.println("Resolving " <> addr <> "...")
+      ens.resolve(p, addr)
+    }
+    False -> Ok(addr)
+  }
+}
+
+/// Resolve if it looks like an ENS name, pass through empty strings.
+fn resolve_if_ens(
+  addr: String,
+  p: provider.Provider,
+) -> Result(String, rpc_types.GleethError) {
+  case addr {
+    "" -> Ok("")
+    _ -> resolve_address(addr, p)
+  }
+}
+
+/// Resolve a list of addresses, resolving any ENS names.
+fn resolve_addresses(
+  addresses: List(String),
+  p: provider.Provider,
+) -> Result(List(String), rpc_types.GleethError) {
+  list.try_map(addresses, fn(addr) { resolve_address(addr, p) })
+}
+
+/// Check if a string looks like an ENS name (contains a dot, doesn't start with 0x).
+fn is_ens_name(s: String) -> Bool {
+  string.contains(s, ".") && !string.starts_with(s, "0x")
 }
 
 fn print_error(error: rpc_types.GleethError) -> Nil {

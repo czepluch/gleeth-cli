@@ -58,5 +58,5 @@ The chain name-to-ID mapping in `value.gleam` is only used by the `abi` command 
 ## Future work
 
 - **Config file**: Add `~/.gleeth.toml` or similar for persisting RPC endpoints per chain, default options, and aliases. Currently everything is env vars.
-- **ENS resolution**: Needs gleeth library support (namehash, resolver contract calls). Once available, all address arguments should transparently resolve ENS names.
+- **ENS resolution**: Implemented. Any command that takes an address transparently resolves `.eth` names via `gleeth/ens.resolve`. Resolution happens in `resolve_ens_in_command` in `gleeth_cli.gleam` after provider creation. The CLI parser allows ENS names through address validation.
 - **EIP-712 signing**: Implemented. `sign-typed-data` command supports sign, verify, and hash modes. Parses standard EIP-712 JSON format.

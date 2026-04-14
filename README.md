@@ -1,6 +1,6 @@
 # gleeth-cli
 
-Ethereum CLI built on [gleeth](https://hex.pm/packages/gleeth). Query blocks, balances, transactions, gas prices, and logs. Sign and send transactions. Manage wallets. Decode calldata, revert reasons, and raw transactions. All from the command line.
+Ethereum CLI built on [gleeth](https://hex.pm/packages/gleeth). Query blocks, balances, transactions, gas prices, and logs. Sign and send transactions. Manage wallets. Decode calldata, revert reasons, and raw transactions. Supports ENS names anywhere an address is expected. All from the command line.
 
 ## Installation
 
@@ -43,8 +43,10 @@ export GLEETH_RPC_URL=http://localhost:8545
 Or use a chain name (`mainnet` and `sepolia` have built-in public RPCs):
 
 ```sh
-gleeth balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 --chain mainnet
+gleeth balance vitalik.eth --chain mainnet
 ```
+
+ENS names work anywhere an address is expected.
 
 For other chains, set an env var and use `--chain`:
 
@@ -84,6 +86,16 @@ $ gleeth balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 Address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 Balance: 10000.0 ETH
 Raw Wei: 0x21e19e0c9bab2400000
+```
+
+**ENS names work on mainnet (any command that takes an address):**
+
+```
+$ gleeth balance vitalik.eth --chain mainnet
+Resolving vitalik.eth...
+Address: 0xd8da6bf26964af9d7eed9e03e53415d37aa96045
+Balance: 1.328645385561465 ETH
+Raw Wei: 0x12704bf04eda60b6
 ```
 
 **Send 1 ETH to another account:**
@@ -182,17 +194,18 @@ gleeth gas-price --chain mainnet --json
 ### Account Queries
 
 ```sh
-# Check balance
+# Check balance (ENS names or hex addresses)
+gleeth balance vitalik.eth
 gleeth balance 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
 
 # Multiple balances (queried in parallel)
-gleeth balance 0xaddr1 0xaddr2 0xaddr3
+gleeth balance vitalik.eth 0xaddr1 0xaddr2
 
 # From a file (one address per line)
 gleeth balance --file addresses.txt
 
 # Get nonce
-gleeth nonce 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+gleeth nonce vitalik.eth
 ```
 
 ### Contract Interaction

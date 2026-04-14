@@ -1153,8 +1153,13 @@ fn sign_typed_data_cmd() -> clip.Command(Result(Args, String)) {
 
 /// Validate an address string, returning a String error.
 fn validate_address_str(address: String) -> Result(String, String) {
-  validation.validate_address(address)
-  |> result.map_error(rpc_types.error_to_string)
+  // Allow ENS names through without validation - they'll be resolved later
+  case string.contains(address, ".") && !string.starts_with(address, "0x") {
+    True -> Ok(address)
+    False ->
+      validation.validate_address(address)
+      |> result.map_error(rpc_types.error_to_string)
+  }
 }
 
 /// Validate a hash string, returning a String error.
@@ -1174,9 +1179,9 @@ fn validate_balance_args(
       case addresses {
         [] -> Error("At least one address or --file must be specified")
         _ -> {
-          validation.validate_addresses(addresses)
+          // Validate each address, allowing ENS names through
+          list.try_map(addresses, validate_address_str)
           |> result.map(fn(addrs) { #(addrs, None) })
-          |> result.map_error(rpc_types.error_to_string)
         }
       }
     }
