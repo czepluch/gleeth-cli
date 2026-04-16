@@ -55,8 +55,16 @@ Key patterns:
 
 The chain name-to-ID mapping in `value.gleam` is only used by the `abi` command (Sourcify lookups) where you need a chain ID without an RPC connection.
 
-## Future work
-
-- **Config file**: Add `~/.gleeth.toml` or similar for persisting RPC endpoints per chain, default options, and aliases. Currently everything is env vars.
 - **ENS resolution**: Implemented. Any command that takes an address transparently resolves `.eth` names via `gleeth/ens.resolve`. Resolution happens in `resolve_ens_in_command` in `gleeth_cli.gleam` after provider creation. The CLI parser allows ENS names through address validation.
 - **EIP-712 signing**: Implemented. `sign-typed-data` command supports sign, verify, and hash modes. Parses standard EIP-712 JSON format.
+
+## Future work
+
+- **Config file**: Add `~/.gleeth.toml` or similar for persisting RPC endpoints per chain, default options, and aliases. Currently everything is env vars. Foundry uses `foundry.toml` with an `[rpc_endpoints]` table as a reference pattern.
+- **Block query enhancements**: `get_block_by_number`/`get_block_by_hash` with full transaction objects (currently only returns tx hashes). Needs gleeth library support for `full_transactions: true` parameter.
+- **Reverse ENS resolution**: Resolve an address back to its ENS name. Needs gleeth library support.
+- **More --chain built-in RPCs**: Currently only mainnet and sepolia have built-in public RPCs. Other chains require env vars. Could add curated public endpoints for popular chains (arbitrum, optimism, base, polygon).
+- **Distribution**: The current install story (clone + `gleam export erlang-shipment` + alias) is clunky. Investigate escript packaging or a wrapper script with `make install` to `~/.local/bin/`.
+- **Batch operations**: Support batching multiple RPC calls (e.g. multi-call across contracts). Could leverage gleeth's OTP process support like `parallel_balance` already does.
+- **Transaction simulation**: `debug_traceTransaction` or `trace_call` support for debugging failed transactions.
+- **Etherscan/block explorer integration**: Fetch ABIs by address from Etherscan API (complementing Sourcify), source code verification status.
